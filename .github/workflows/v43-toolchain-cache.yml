@@ -1,4 +1,4 @@
-name: Build Offline ESP32 Toolchain Cache
+name: Build Offline ESP32 Toolchain Cache Split
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
           python -m pip download platformio -d offline/wheels
           python -m pip install platformio
 
-      - name: Create exact dependency probe project
+      - name: Create dependency probe
         run: |
           mkdir -p /tmp/v43probe/src
           cat > /tmp/v43probe/platformio.ini <<'EOF'
@@ -34,8 +34,6 @@ jobs:
           platform = espressif32@6.9.0
           board = esp32dev
           framework = arduino
-          monitor_speed = 115200
-          upload_speed = 460800
           board_build.partitions = huge_app.csv
           lib_deps =
             bodmer/TFT_eSPI@2.5.43
@@ -79,19 +77,69 @@ jobs:
           cd /tmp/v43probe
           pio run -e cyd_st7789
 
-      - name: Pack offline cache
+      - name: Stage packages
         run: |
-          mkdir -p offline/cache
-          cp -a ~/.platformio offline/cache/platformio_core
-          mkdir -p offline/cache/libdeps
-          cp -a /tmp/v43probe/.pio/libdeps/cyd_st7789 offline/cache/libdeps/
-          tar -C offline -czf offline/v43_offline_toolchain.tar.gz wheels cache
-          ls -lh offline/v43_offline_toolchain.tar.gz
+          mkdir -p offline/stage/platforms offline/stage/packages offline/stage/libdeps
+          cp -a ~/.platformio/platforms/espressif32 offline/stage/platforms/
+          cp -a ~/.platformio/packages/framework-arduinoespressif32 offline/stage/packages/
+          cp -a ~/.platformio/packages/toolchain-xtensa-esp32 offline/stage/packages/
+          cp -a ~/.platformio/packages/tool-esptoolpy offline/stage/packages/
+          cp -a ~/.platformio/packages/tool-scons offline/stage/packages/
+          cp -a /tmp/v43probe/.pio/libdeps/cyd_st7789 offline/stage/libdeps/
+          du -sh offline/wheels offline/stage/* offline/stage/packages/* offline/stage/libdeps/* || true
 
-      - name: Upload cache
+      - name: Upload PlatformIO wheels
         uses: actions/upload-artifact@v4
         with:
-          name: v43-offline-toolchain
-          path: offline/v43_offline_toolchain.tar.gz
-          compression-level: 0
+          name: v43-pio-wheels
+          path: offline/wheels/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload ESP32 platform
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-platform-espressif32
+          path: offline/stage/platforms/espressif32/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload Arduino framework
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-framework-arduinoesp32
+          path: offline/stage/packages/framework-arduinoespressif32/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload Xtensa toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-toolchain-xtensa
+          path: offline/stage/packages/toolchain-xtensa-esp32/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload esptool
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-esptoolpy
+          path: offline/stage/packages/tool-esptoolpy/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload SCons
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-tool-scons
+          path: offline/stage/packages/tool-scons/
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-libdeps
+          path: offline/stage/libdeps/cyd_st7789/
+          compression-level: 6
           retention-days: 1
