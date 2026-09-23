@@ -24,6 +24,7 @@ private:
   void drawChristmasGreeting();
   void drawBirthdayHeader(const String& name);
   void drawSceneTag(SceneType scene);
+  void drawPlayButton();
   static bool jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);
   static TFT_eSPI* callbackTft_;
 };
