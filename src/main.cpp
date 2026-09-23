@@ -10,6 +10,7 @@
 #include "WebPortal.h"
 #include "DisplayManager.h"
 #include "TouchManager.h"
+#include "AudioManager.h"
 
 SettingsManager settingsManager;
 CalendarEngine calendarEngine;
@@ -17,17 +18,21 @@ TimeManager timeManager;
 WifiManager wifiManager;
 DisplayManager displayManager;
 TouchManager touchManager;
+AudioManager audioManager;
 WebPortal webPortal(settingsManager, wifiManager);
 
 DeviceSettings settings;
+CalendarState currentCalendarState;
+bool calendarStateReady = false;
 bool timeReady = false;
+bool touchLatched = false;
 uint32_t lastScreenRefresh = 0;
 uint32_t lastNtpRetry = 0;
 uint32_t restartAt = 0;
 
 static void setupOta() {
   ArduinoOTA.setHostname("weihnachtsuhr");
-  ArduinoOTA.setPassword("weihnachten"); // zmien przed udostepnieniem urzadzenia poza domowa siecia
+  ArduinoOTA.setPassword("weihnachten");
   ArduinoOTA.begin();
 }
 
@@ -38,19 +43,29 @@ static void refreshCalendar(bool force = false) {
   tm local{};
   if (!timeManager.getLocal(local)) {
     timeReady = false;
+    calendarStateReady = false;
     displayManager.showTimeError();
     return;
   }
 
   settings = settingsManager.load();
-  const CalendarState state = calendarEngine.evaluate(local, settings);
-  displayManager.showCalendar(state, settings, local);
+  currentCalendarState = calendarEngine.evaluate(local, settings);
+  calendarStateReady = true;
+  displayManager.showCalendar(currentCalendarState, settings, local);
   lastScreenRefresh = millis();
+}
+
+static bool inPlayButton(const TouchPoint& p) {
+  return p.x >= AppConfig::PLAY_X1 && p.x <= AppConfig::PLAY_X2 &&
+         p.y >= AppConfig::PLAY_Y1 && p.y <= AppConfig::PLAY_Y2;
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(250);
+  delay(100);
+
+  // Najwazniejsze dla tej rewizji CYD: audio od bootu ma byc fizycznie odlaczone.
+  audioManager.begin();
 
   settingsManager.begin();
   settings = settingsManager.load();
@@ -101,6 +116,7 @@ void loop() {
     restartAt = millis() + 1200;
   }
   if (restartAt && static_cast<int32_t>(millis() - restartAt) >= 0) {
+    audioManager.stop();
     ESP.restart();
   }
 
@@ -113,11 +129,23 @@ void loop() {
 
   refreshCalendar(false);
 
-  // Touch jest od poczatku inicjalizowany. Przycisk Play dodamy w v2 razem z audio.
   if (AppConfig::AUDIO_FEATURE_ENABLED) {
-    TouchPoint p = touchManager.read();
-    if (p.touched) {
-      Serial.printf("Touch: %d,%d raw=%u,%u\n", p.x, p.y, p.rawX, p.rawY);
+    const TouchPoint p = touchManager.read();
+
+    if (!p.touched) {
+      touchLatched = false;
+    } else if (!touchLatched) {
+      touchLatched = true;
+
+      if (inPlayButton(p)) {
+        const SceneType scene = calendarStateReady ? currentCalendarState.scene : SceneType::NORMAL;
+        Serial.printf("Audio Play: scene=%u\n", static_cast<unsigned>(scene));
+
+        audioManager.playForScene(scene);
+
+        // Po melodii DAC jest juz OFF/Hi-Z. Odswiezamy ekran po blokujacym odtwarzaniu.
+        if (timeReady) refreshCalendar(true);
+      }
     }
   }
 
