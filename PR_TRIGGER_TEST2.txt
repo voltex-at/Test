@@ -1,0 +1,1 @@
+Trigger AUDIO TEST 2 build: DAC26 disabled, GPIO26 Hi-Z.
