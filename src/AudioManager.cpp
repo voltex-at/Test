@@ -92,7 +92,9 @@ void AudioManager::playTone(uint16_t frequency, uint16_t durationMs) {
     (static_cast<uint64_t>(frequency) << 32) / SAMPLE_RATE
   );
 
-  const uint32_t attackSamples = min<uint32_t>(totalSamples / 4, SAMPLE_RATE * 12UL / 1000UL);
+  const uint32_t rampLimit = SAMPLE_RATE * 12UL / 1000UL;
+  const uint32_t quarter = totalSamples / 4;
+  const uint32_t attackSamples = quarter < rampLimit ? quarter : rampLimit;
   const uint32_t releaseSamples = attackSamples;
 
   uint32_t phase = 0;
