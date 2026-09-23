@@ -1,125 +1,107 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <ArduinoOTA.h>
+#include <TFT_eSPI.h>
+#include <math.h>
 
-#include "Config.h"
-#include "SettingsManager.h"
-#include "CalendarEngine.h"
-#include "TimeManager.h"
-#include "WifiManager.h"
-#include "WebPortal.h"
-#include "DisplayManager.h"
-#include "TouchManager.h"
+TFT_eSPI lcd;
 
-SettingsManager settingsManager;
-CalendarEngine calendarEngine;
-TimeManager timeManager;
-WifiManager wifiManager;
-DisplayManager displayManager;
-TouchManager touchManager;
-WebPortal webPortal(settingsManager, wifiManager);
+static constexpr int PIN_BACKLIGHT = 21;
+static constexpr int PIN_AUDIO_DAC = 26;
+static constexpr uint32_t SAMPLE_RATE = 16000;
+static constexpr uint32_t TONE_MS = 3500;
+static constexpr uint32_t SILENCE_MS = 1800;
 
-DeviceSettings settings;
-bool timeReady = false;
-uint32_t lastScreenRefresh = 0;
-uint32_t lastNtpRetry = 0;
-uint32_t restartAt = 0;
-
-static void setupOta() {
-  ArduinoOTA.setHostname("weihnachtsuhr");
-  ArduinoOTA.setPassword("weihnachten"); // zmien przed udostepnieniem urzadzenia poza domowa siecia
-  ArduinoOTA.begin();
+static void dacOffHiZ() {
+  dacDisable(PIN_AUDIO_DAC);
+  pinMode(PIN_AUDIO_DAC, INPUT);
 }
 
-static void refreshCalendar(bool force = false) {
-  if (!timeReady) return;
-  if (!force && millis() - lastScreenRefresh < AppConfig::SCREEN_REFRESH_MS) return;
+static void showPhase(const char* title, const char* subtitle, uint16_t color) {
+  lcd.fillRect(0, 54, 320, 160, TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.drawString("AUDIO TEST 4", 160, 72, 4);
+  lcd.setTextColor(color, TFT_BLACK);
+  lcd.drawString(title, 160, 124, 4);
+  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  lcd.drawString(subtitle, 160, 164, 2);
+}
 
-  tm local{};
-  if (!timeManager.getLocal(local)) {
-    timeReady = false;
-    displayManager.showTimeError();
-    return;
+static void playTone440(uint8_t amplitude, uint32_t durationMs) {
+  dacWrite(PIN_AUDIO_DAC, 128);
+  delay(80);
+
+  const uint32_t totalSamples = (SAMPLE_RATE * durationMs) / 1000UL;
+  uint32_t phase = 0;
+  const uint32_t phaseStep = (uint32_t)((440.0 * 4294967296.0) / SAMPLE_RATE);
+  uint32_t nextUs = micros();
+
+  for (uint32_t i = 0; i < totalSamples; ++i) {
+    phase += phaseStep;
+    const float angle = (float)((phase >> 16) & 0xFFFF) * (2.0f * PI / 65536.0f);
+    const int sample = 128 + (int)((float)amplitude * sinf(angle));
+    dacWrite(PIN_AUDIO_DAC, constrain(sample, 0, 255));
+
+    nextUs += 1000000UL / SAMPLE_RATE;
+    while ((int32_t)(micros() - nextUs) < 0) {}
   }
 
-  settings = settingsManager.load();
-  const CalendarState state = calendarEngine.evaluate(local, settings);
-  displayManager.showCalendar(state, settings, local);
-  lastScreenRefresh = millis();
+  dacWrite(PIN_AUDIO_DAC, 128);
+  delay(80);
+}
+
+static void runLevel(uint8_t amplitude) {
+  char line1[32];
+  char line2[48];
+
+  snprintf(line1, sizeof(line1), "AMP +/- %u", amplitude);
+  snprintf(line2, sizeof(line2), "440 Hz, DAC active, level %u", amplitude);
+
+  showPhase(line1, line2, TFT_YELLOW);
+  Serial.printf("TEST4: playing 440 Hz at amplitude +/- %u\n", amplitude);
+  playTone440(amplitude, TONE_MS);
+
+  dacOffHiZ();
+  showPhase("SILENCE", "DAC OFF / GPIO26 Hi-Z", TFT_GREEN);
+  Serial.println("TEST4: DAC OFF / GPIO26 Hi-Z");
+  delay(SILENCE_MS);
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(250);
 
-  settingsManager.begin();
-  settings = settingsManager.load();
-
-  displayManager.begin();
-  displayManager.showBoot("Start...");
-  delay(300);
-
-  const bool sdOk = displayManager.beginSd();
-  Serial.printf("SD: %s\n", sdOk ? "OK" : "FEHLT");
-
-  touchManager.begin();
-
-  if (settingsManager.hasWifi()) {
-    displayManager.showWifiStatus("WLAN", "Verbinde...", settings.ssid);
-    if (wifiManager.connectStation(settings, AppConfig::WIFI_CONNECT_TIMEOUT_MS)) {
-      displayManager.showWifiStatus("WLAN VERBUNDEN", WiFi.SSID(), wifiManager.ip());
-      delay(1000);
-
-      timeManager.begin();
-      displayManager.showWifiStatus("ZEIT", "NTP Synchronisation...", "Bitte warten");
-      timeReady = timeManager.sync(AppConfig::NTP_SYNC_TIMEOUT_MS);
-      if (!timeReady) displayManager.showTimeError();
-
-      setupOta();
-    } else {
-      wifiManager.startSetupAp();
-      displayManager.showWifiStatus("WLAN SETUP", AppConfig::AP_SSID, wifiManager.ip());
-    }
-  } else {
-    wifiManager.startSetupAp();
-    displayManager.showWifiStatus("WLAN SETUP", AppConfig::AP_SSID, wifiManager.ip());
+  const int leds[] = {4, 16, 17};
+  for (int pin : leds) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
   }
 
-  webPortal.begin();
-  if (timeReady) refreshCalendar(true);
+  pinMode(PIN_BACKLIGHT, OUTPUT);
+  digitalWrite(PIN_BACKLIGHT, HIGH);
+
+  dacOffHiZ();
+
+  lcd.init();
+  lcd.setRotation(1);
+  lcd.fillScreen(TFT_BLACK);
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  lcd.drawString("AUDIO TEST 4", 160, 68, 4);
+  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+  lcd.drawString("440 Hz: +/-4 / 8 / 16 / 32", 160, 116, 2);
+  lcd.drawString("Hi-Z silence between levels", 160, 146, 2);
+  lcd.drawString("PWM / WiFi / SD / touch OFF", 160, 176, 2);
+
+  delay(1500);
 }
 
 void loop() {
-  wifiManager.processDns();
-  webPortal.handle();
+  digitalWrite(PIN_BACKLIGHT, HIGH);
 
-  if (wifiManager.connected()) {
-    ArduinoOTA.handle();
-  }
+  runLevel(4);
+  runLevel(8);
+  runLevel(16);
+  runLevel(32);
 
-  if (webPortal.restartRequested() && restartAt == 0) {
-    restartAt = millis() + 1200;
-  }
-  if (restartAt && static_cast<int32_t>(millis() - restartAt) >= 0) {
-    ESP.restart();
-  }
-
-  if (!timeReady && wifiManager.connected() && millis() - lastNtpRetry > 30000) {
-    lastNtpRetry = millis();
-    timeManager.begin();
-    timeReady = timeManager.sync(5000);
-    if (timeReady) refreshCalendar(true);
-  }
-
-  refreshCalendar(false);
-
-  // Touch jest od poczatku inicjalizowany. Przycisk Play dodamy w v2 razem z audio.
-  if (AppConfig::AUDIO_FEATURE_ENABLED) {
-    TouchPoint p = touchManager.read();
-    if (p.touched) {
-      Serial.printf("Touch: %d,%d raw=%u,%u\n", p.x, p.y, p.rawX, p.rawY);
-    }
-  }
-
-  delay(5);
+  showPhase("CYCLE END", "Restarting levels...", TFT_CYAN);
+  delay(2500);
 }
