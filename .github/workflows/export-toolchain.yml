@@ -82,22 +82,44 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/pio_py
         run: python -m platformio run -e cyd_st7789
 
-      - name: Pack portable toolchain
+      - name: Pack and split portable toolchain
         shell: bash
         run: |
           set -euxo pipefail
           tar -C "$GITHUB_WORKSPACE" -cf - pio_py | zstd -15 -T0 -o pio_core.tar.zst
           tar -C "$HOME" -cf - .platformio | zstd -15 -T0 -o platformio_home.tar.zst
           sha256sum pio_core.tar.zst platformio_home.tar.zst > SHA256SUMS.txt
-          ls -lh pio_core.tar.zst platformio_home.tar.zst
+          split -b 300M -d -a 2 platformio_home.tar.zst piohome.part.
+          ls -lh pio_core.tar.zst platformio_home.tar.zst piohome.part.*
 
-      - name: Upload cache artifact
+      - name: Upload PlatformIO core
         uses: actions/upload-artifact@v4
         with:
-          name: platformio-esp32-v43-cache
-          path: |
-            pio_core.tar.zst
-            platformio_home.tar.zst
-            SHA256SUMS.txt
+          name: pio-core-v43
+          path: pio_core.tar.zst
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload PlatformIO home part 00
+        uses: actions/upload-artifact@v4
+        with:
+          name: pio-home-v43-part00
+          path: piohome.part.00
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload PlatformIO home part 01
+        uses: actions/upload-artifact@v4
+        with:
+          name: pio-home-v43-part01
+          path: piohome.part.01
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: pio-v43-checksums
+          path: SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 3
