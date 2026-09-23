@@ -19,11 +19,13 @@ public:
   void playForScene(SceneType scene);
   bool isPlaying() const { return playing_; }
 
+  // Uzywane wewnetrznie przez sekwencer nut.
+  void playTone(uint16_t frequency, uint16_t durationMs);
+  void playRest(uint16_t durationMs);
+
 private:
   bool playing_ = false;
   int8_t sineLut_[256]{};
 
   void enableDac();
-  void playTone(uint16_t frequency, uint16_t durationMs);
-  void playRest(uint16_t durationMs);
 };
