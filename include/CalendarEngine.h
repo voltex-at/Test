@@ -10,7 +10,10 @@ enum class SceneType : uint8_t {
   CHRISTMAS,
   GRINCH,
   SILVESTER,
-  BIRTHDAY
+  BIRTHDAY,
+  HALLOWEEN,
+  EASTER,
+  VACATION
 };
 
 struct CalendarState {
