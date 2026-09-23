@@ -1,0 +1,103 @@
+name: Export ESP32 PlatformIO Toolchain Cache
+
+on:
+  push:
+    branches: [toolchain-cache]
+  workflow_dispatch:
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install portable PlatformIO core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --target "$GITHUB_WORKSPACE/pio_py" platformio==6.2.0
+
+      - name: Create exact v4.3 dependency project
+        shell: bash
+        run: |
+          mkdir -p cache_project/src
+          cat > cache_project/platformio.ini <<'EOF'
+          [platformio]
+          default_envs = cyd_st7789
+
+          [env]
+          platform = espressif32@6.9.0
+          board = esp32dev
+          framework = arduino
+          monitor_speed = 115200
+          upload_speed = 460800
+          board_build.partitions = huge_app.csv
+          lib_deps =
+            bodmer/TFT_eSPI@2.5.43
+            bodmer/TJpg_Decoder@1.1.0
+          build_flags =
+            -D USER_SETUP_LOADED=1
+            -D USE_HSPI_PORT=1
+            -D TFT_MISO=12
+            -D TFT_MOSI=13
+            -D TFT_SCLK=14
+            -D TFT_CS=15
+            -D TFT_DC=2
+            -D TFT_RST=-1
+            -D TFT_WIDTH=240
+            -D TFT_HEIGHT=320
+            -D LOAD_GLCD=1
+            -D LOAD_FONT2=1
+            -D LOAD_FONT4=1
+            -D LOAD_FONT7=1
+            -D LOAD_GFXFF=1
+            -D SPI_FREQUENCY=40000000
+
+          [env:cyd_st7789]
+          build_flags =
+            ${env.build_flags}
+            -D ST7789_DRIVER=1
+            -D TFT_INVERSION_OFF=1
+            -D TFT_RGB_ORDER=0
+            -D TFT_SPI_MODE=3
+          EOF
+
+          cat > cache_project/src/main.cpp <<'EOF'
+          #include <Arduino.h>
+          #include <TFT_eSPI.h>
+          #include <TJpg_Decoder.h>
+          TFT_eSPI tft;
+          void setup() { tft.init(); TJpgDec.setJpgScale(1); }
+          void loop() {}
+          EOF
+
+      - name: Populate PlatformIO packages and libraries
+        working-directory: cache_project
+        env:
+          PYTHONPATH: ${{ github.workspace }}/pio_py
+        run: python -m platformio run -e cyd_st7789
+
+      - name: Pack portable toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          tar -C "$GITHUB_WORKSPACE" -cf - pio_py | zstd -15 -T0 -o pio_core.tar.zst
+          tar -C "$HOME" -cf - .platformio | zstd -15 -T0 -o platformio_home.tar.zst
+          sha256sum pio_core.tar.zst platformio_home.tar.zst > SHA256SUMS.txt
+          ls -lh pio_core.tar.zst platformio_home.tar.zst
+
+      - name: Upload cache artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: platformio-esp32-v43-cache
+          path: |
+            pio_core.tar.zst
+            platformio_home.tar.zst
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 3
