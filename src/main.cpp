@@ -1,49 +1,125 @@
 #include <Arduino.h>
-#include <TFT_eSPI.h>
+#include <WiFi.h>
+#include <ArduinoOTA.h>
 
-TFT_eSPI lcd;
+#include "Config.h"
+#include "SettingsManager.h"
+#include "CalendarEngine.h"
+#include "TimeManager.h"
+#include "WifiManager.h"
+#include "WebPortal.h"
+#include "DisplayManager.h"
+#include "TouchManager.h"
 
-static constexpr int PIN_BACKLIGHT = 21;
-static constexpr int PIN_AUDIO_DAC = 26;
+SettingsManager settingsManager;
+CalendarEngine calendarEngine;
+TimeManager timeManager;
+WifiManager wifiManager;
+DisplayManager displayManager;
+TouchManager touchManager;
+WebPortal webPortal(settingsManager, wifiManager);
+
+DeviceSettings settings;
+bool timeReady = false;
+uint32_t lastScreenRefresh = 0;
+uint32_t lastNtpRetry = 0;
+uint32_t restartAt = 0;
+
+static void setupOta() {
+  ArduinoOTA.setHostname("weihnachtsuhr");
+  ArduinoOTA.setPassword("weihnachten"); // zmien przed udostepnieniem urzadzenia poza domowa siecia
+  ArduinoOTA.begin();
+}
+
+static void refreshCalendar(bool force = false) {
+  if (!timeReady) return;
+  if (!force && millis() - lastScreenRefresh < AppConfig::SCREEN_REFRESH_MS) return;
+
+  tm local{};
+  if (!timeManager.getLocal(local)) {
+    timeReady = false;
+    displayManager.showTimeError();
+    return;
+  }
+
+  settings = settingsManager.load();
+  const CalendarState state = calendarEngine.evaluate(local, settings);
+  displayManager.showCalendar(state, settings, local);
+  lastScreenRefresh = millis();
+}
 
 void setup() {
   Serial.begin(115200);
+  delay(250);
 
-  const int leds[] = {4, 16, 17};
-  for (int pin : leds) {
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, HIGH);
+  settingsManager.begin();
+  settings = settingsManager.load();
+
+  displayManager.begin();
+  displayManager.showBoot("Start...");
+  delay(300);
+
+  const bool sdOk = displayManager.beginSd();
+  Serial.printf("SD: %s\n", sdOk ? "OK" : "FEHLT");
+
+  touchManager.begin();
+
+  if (settingsManager.hasWifi()) {
+    displayManager.showWifiStatus("WLAN", "Verbinde...", settings.ssid);
+    if (wifiManager.connectStation(settings, AppConfig::WIFI_CONNECT_TIMEOUT_MS)) {
+      displayManager.showWifiStatus("WLAN VERBUNDEN", WiFi.SSID(), wifiManager.ip());
+      delay(1000);
+
+      timeManager.begin();
+      displayManager.showWifiStatus("ZEIT", "NTP Synchronisation...", "Bitte warten");
+      timeReady = timeManager.sync(AppConfig::NTP_SYNC_TIMEOUT_MS);
+      if (!timeReady) displayManager.showTimeError();
+
+      setupOta();
+    } else {
+      wifiManager.startSetupAp();
+      displayManager.showWifiStatus("WLAN SETUP", AppConfig::AP_SSID, wifiManager.ip());
+    }
+  } else {
+    wifiManager.startSetupAp();
+    displayManager.showWifiStatus("WLAN SETUP", AppConfig::AP_SSID, wifiManager.ip());
   }
 
-  // No PWM on the backlight.
-  pinMode(PIN_BACKLIGHT, OUTPUT);
-  digitalWrite(PIN_BACKLIGHT, HIGH);
-
-  // AUDIO TEST 2: explicitly attach DAC once, then disable it,
-  // and leave GPIO26 as a high-impedance input.
-  dacWrite(PIN_AUDIO_DAC, 128);
-  delay(20);
-  dacDisable(PIN_AUDIO_DAC);
-  pinMode(PIN_AUDIO_DAC, INPUT);
-
-  lcd.init();
-  lcd.setRotation(1);
-  lcd.fillScreen(TFT_BLACK);
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextColor(TFT_WHITE, TFT_BLACK);
-  lcd.drawString("AUDIO TEST 2", 160, 72, 4);
-  lcd.setTextColor(TFT_GREEN, TFT_BLACK);
-  lcd.drawString("BACKLIGHT: NO PWM", 160, 114, 2);
-  lcd.setTextColor(TFT_YELLOW, TFT_BLACK);
-  lcd.drawString("GPIO26: DAC OFF / Hi-Z", 160, 144, 2);
-  lcd.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  lcd.drawString("WiFi / SD / touch OFF", 160, 176, 2);
-
-  Serial.println("AUDIO TEST 2: GPIO21 HIGH, DAC26 disabled, GPIO26 INPUT Hi-Z.");
+  webPortal.begin();
+  if (timeReady) refreshCalendar(true);
 }
 
 void loop() {
-  digitalWrite(PIN_BACKLIGHT, HIGH);
-  pinMode(PIN_AUDIO_DAC, INPUT);
-  delay(1000);
+  wifiManager.processDns();
+  webPortal.handle();
+
+  if (wifiManager.connected()) {
+    ArduinoOTA.handle();
+  }
+
+  if (webPortal.restartRequested() && restartAt == 0) {
+    restartAt = millis() + 1200;
+  }
+  if (restartAt && static_cast<int32_t>(millis() - restartAt) >= 0) {
+    ESP.restart();
+  }
+
+  if (!timeReady && wifiManager.connected() && millis() - lastNtpRetry > 30000) {
+    lastNtpRetry = millis();
+    timeManager.begin();
+    timeReady = timeManager.sync(5000);
+    if (timeReady) refreshCalendar(true);
+  }
+
+  refreshCalendar(false);
+
+  // Touch jest od poczatku inicjalizowany. Przycisk Play dodamy w v2 razem z audio.
+  if (AppConfig::AUDIO_FEATURE_ENABLED) {
+    TouchPoint p = touchManager.read();
+    if (p.touched) {
+      Serial.printf("Touch: %d,%d raw=%u,%u\n", p.x, p.y, p.rawX, p.rawY);
+    }
+  }
+
+  delay(5);
 }
