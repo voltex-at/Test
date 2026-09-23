@@ -1,5 +1,25 @@
 #include "CalendarEngine.h"
 
+namespace {
+void easterSunday(int year, int& month, int& day) {
+  // Meeus/Jones/Butcher - Gregorian Easter.
+  const int a = year % 19;
+  const int b = year / 100;
+  const int c = year % 100;
+  const int d = b / 4;
+  const int e = b % 4;
+  const int f = (b + 8) / 25;
+  const int g = (b - f + 1) / 3;
+  const int h = (19 * a + b - d - g + 15) % 30;
+  const int i = c / 4;
+  const int k = c % 4;
+  const int l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const int m = (a + 11 * h + 22 * l) / 451;
+  month = (h + l - 7 * m + 114) / 31;
+  day = ((h + l - 7 * m + 114) % 31) + 1;
+}
+}
+
 // Algorytm typu civil-date -> liczba dni. Operuje na datach kalendarzowych,
 // wiec zmiany DST i dlugosc doby 23/25h nie psuja licznika.
 int64_t CalendarEngine::daysFromCivil(int y, unsigned m, unsigned d) {
@@ -44,6 +64,21 @@ CalendarState CalendarEngine::evaluate(const tm& t, const DeviceSettings& settin
     return s;
   }
 
+  if (month == 10 && day == 31) {
+    s.scene = SceneType::HALLOWEEN;
+    return s;
+  }
+
+  int easterMonth = 0;
+  int easterDay = 0;
+  easterSunday(year, easterMonth, easterDay);
+  const int64_t easterCivil = daysFromCivil(year, easterMonth, easterDay);
+  const int64_t easterDelta = nowDay - easterCivil;
+  if (easterDelta == 0 || easterDelta == 1) {
+    s.scene = SceneType::EASTER;
+    return s;
+  }
+
   if (month == 12 && day == 5) {
     s.scene = SceneType::KRAMPUS;
   } else if (month == 12 && day == 6) {
@@ -69,6 +104,9 @@ const char* CalendarEngine::sceneImage(SceneType scene) {
     case SceneType::GRINCH:    return "/images/grinch.jpg";
     case SceneType::SILVESTER: return "/images/silvester.jpg";
     case SceneType::BIRTHDAY:  return "/images/birthday.jpg";
+    case SceneType::HALLOWEEN: return "/images/halloween.jpg";
+    case SceneType::EASTER:    return "/images/easter.jpg";
+    case SceneType::VACATION:  return "/images/vacation.jpg";
     default:                   return "/images/normal.jpg";
   }
 }
@@ -81,6 +119,9 @@ const char* CalendarEngine::sceneLabel(SceneType scene) {
     case SceneType::GRINCH:    return "GRINCH";
     case SceneType::SILVESTER: return "SILVESTER";
     case SceneType::BIRTHDAY:  return "HAPPY BIRTHDAY";
+    case SceneType::HALLOWEEN: return "HALLOWEEN";
+    case SceneType::EASTER:    return "OSTERN";
+    case SceneType::VACATION:  return "URLAUB";
     default:                   return "";
   }
 }
