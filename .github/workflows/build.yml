@@ -1,4 +1,4 @@
-name: Build CYD Audio Test 3 BIN
+name: Build Weihnachtsuhr ESP32 BIN
 
 on:
   push:
@@ -21,27 +21,30 @@ jobs:
         run: pip install platformio
 
       - name: Build firmware
-        run: pio run -e cyd_st7789_audio_test3
+        run: pio run -e cyd-esp32-2432s028r
 
       - name: Prepare BIN files
         shell: bash
         run: |
           set -euxo pipefail
-          ENV_DIR=".pio/build/cyd_st7789_audio_test3"
+          ENV_DIR=".pio/build/cyd-esp32-2432s028r"
           mkdir -p dist
-          cp "$ENV_DIR/firmware.bin" dist/Weihnachtsuhr_AUDIO_TEST3_update.bin
+          cp "$ENV_DIR/firmware.bin" dist/firmware.bin
           cp "$ENV_DIR/bootloader.bin" dist/bootloader.bin
           cp "$ENV_DIR/partitions.bin" dist/partitions.bin
           BOOT_APP0="$(find ~/.platformio/packages -type f -name boot_app0.bin | head -n 1)"
           cp "$BOOT_APP0" dist/boot_app0.bin
           ESPTOOL="$(find ~/.platformio/packages -type f -name esptool.py | head -n 1)"
-          python "$ESPTOOL" --chip esp32 merge_bin -o dist/Weihnachtsuhr_AUDIO_TEST3_full.bin             --flash_mode dio --flash_freq 40m --flash_size 4MB             0x1000 dist/bootloader.bin             0x8000 dist/partitions.bin             0xe000 dist/boot_app0.bin             0x10000 dist/Weihnachtsuhr_AUDIO_TEST3_update.bin
+          python "$ESPTOOL" --chip esp32 merge_bin -o dist/full_flash.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 4MB \
+            0x1000 dist/bootloader.bin \
+            0x8000 dist/partitions.bin \
+            0xe000 dist/boot_app0.bin \
+            0x10000 dist/firmware.bin
           {
-            echo "Firmware: CYD AUDIO TEST 3"
-            echo "Board: ESP32-2432S028 / ST7789"
-            echo "Cycle: 5 s 440 Hz DAC active / 5 s DAC off Hi-Z"
-            echo "Backlight GPIO21: constant HIGH, PWM disabled"
-            echo "WiFi / SD / touch: disabled"
+            echo "Project: Weihnachtsuhr"
+            echo "Board: ESP32-2432S028R / esp32dev"
+            echo "Environment: cyd-esp32-2432s028r"
             echo "Git commit: $GITHUB_SHA"
             echo
             sha256sum dist/*.bin
@@ -51,7 +54,7 @@ jobs:
       - name: Upload compiled binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-AUDIO-TEST3-BIN
+          name: Weihnachtsuhr-ESP32-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
