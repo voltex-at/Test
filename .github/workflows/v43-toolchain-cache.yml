@@ -1,0 +1,97 @@
+name: Build Offline ESP32 Toolchain Cache
+
+on:
+  push:
+    branches: [v43-toolchain-cache]
+  workflow_dispatch:
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download PlatformIO wheelhouse
+        run: |
+          mkdir -p offline/wheels
+          python -m pip download platformio -d offline/wheels
+          python -m pip install platformio
+
+      - name: Create exact dependency probe project
+        run: |
+          mkdir -p /tmp/v43probe/src
+          cat > /tmp/v43probe/platformio.ini <<'EOF'
+          [platformio]
+          default_envs = cyd_st7789
+
+          [env]
+          platform = espressif32@6.9.0
+          board = esp32dev
+          framework = arduino
+          monitor_speed = 115200
+          upload_speed = 460800
+          board_build.partitions = huge_app.csv
+          lib_deps =
+            bodmer/TFT_eSPI@2.5.43
+            bodmer/TJpg_Decoder@1.1.0
+          build_flags =
+            -D USER_SETUP_LOADED=1
+            -D USE_HSPI_PORT=1
+            -D TFT_MISO=12
+            -D TFT_MOSI=13
+            -D TFT_SCLK=14
+            -D TFT_CS=15
+            -D TFT_DC=2
+            -D TFT_RST=-1
+            -D TFT_WIDTH=240
+            -D TFT_HEIGHT=320
+            -D LOAD_GLCD=1
+            -D LOAD_FONT2=1
+            -D LOAD_FONT4=1
+            -D LOAD_FONT7=1
+            -D LOAD_GFXFF=1
+            -D SPI_FREQUENCY=40000000
+
+          [env:cyd_st7789]
+          build_flags =
+            ${env.build_flags}
+            -D ST7789_DRIVER=1
+            -D TFT_INVERSION_OFF=1
+            -D TFT_RGB_ORDER=0
+            -D TFT_SPI_MODE=3
+          EOF
+          cat > /tmp/v43probe/src/main.cpp <<'EOF'
+          #include <Arduino.h>
+          #include <TFT_eSPI.h>
+          #include <TJpg_Decoder.h>
+          void setup() {}
+          void loop() {}
+          EOF
+
+      - name: Populate ESP32 toolchain and libraries
+        run: |
+          cd /tmp/v43probe
+          pio run -e cyd_st7789
+
+      - name: Pack offline cache
+        run: |
+          mkdir -p offline/cache
+          cp -a ~/.platformio offline/cache/platformio_core
+          mkdir -p offline/cache/libdeps
+          cp -a /tmp/v43probe/.pio/libdeps/cyd_st7789 offline/cache/libdeps/
+          tar -C offline -czf offline/v43_offline_toolchain.tar.gz wheels cache
+          ls -lh offline/v43_offline_toolchain.tar.gz
+
+      - name: Upload cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: v43-offline-toolchain
+          path: offline/v43_offline_toolchain.tar.gz
+          compression-level: 0
+          retention-days: 1
