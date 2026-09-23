@@ -36,7 +36,7 @@ bool DisplayManager::beginSd() {
 }
 
 void DisplayManager::setBrightness(uint8_t percent) {
-  // v1: proste ON/OFF. PWM dodamy po tescie konkretnej rewizji CYD.
+  // Bez PWM - testy audio pokazaly, ze statyczny stan podswietlenia jest najczystszy.
   digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, percent == 0 ? LOW : HIGH);
 }
 
@@ -67,7 +67,6 @@ void DisplayManager::showWifiStatus(const String& title, const String& line1, co
     tft_.fillScreen(TFT_DARKGREY);
   }
 
-  // Obszar srodkowy odpowiada drewnianej tablicy na przygotowanej grafice.
   tft_.setTextDatum(MC_DATUM);
   tft_.setTextColor(TFT_WHITE);
   tft_.drawString(title, 190, 78, 4);
@@ -80,7 +79,6 @@ void DisplayManager::showWifiStatus(const String& title, const String& line1, co
 }
 
 void DisplayManager::drawCountdownPanel(int days) {
-  // Polprzezroczystosci TFT nie ma, wiec uzywamy zwartego ciemnego panelu.
   tft_.fillRoundRect(74, 55, 172, 122, 12, TFT_BLACK);
   tft_.drawRoundRect(74, 55, 172, 122, 12, TFT_GOLD);
   tft_.setTextDatum(MC_DATUM);
@@ -121,10 +119,21 @@ void DisplayManager::drawSceneTag(SceneType scene) {
   if (scene == SceneType::NORMAL || scene == SceneType::BIRTHDAY || scene == SceneType::CHRISTMAS) return;
   const char* label = CalendarEngine::sceneLabel(scene);
   if (!label || !*label) return;
-  tft_.fillRoundRect(8, 8, 102, 28, 7, TFT_BLACK);
+  tft_.fillRoundRect(8, 8, 110, 28, 7, TFT_BLACK);
   tft_.setTextDatum(MC_DATUM);
   tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString(label, 59, 22, 2);
+  tft_.drawString(label, 63, 22, 2);
+}
+
+void DisplayManager::drawPlayButton() {
+  if (!AppConfig::AUDIO_FEATURE_ENABLED) return;
+
+  const int16_t cx = 292;
+  const int16_t cy = 27;
+  tft_.fillCircle(cx, cy, 20, TFT_BLACK);
+  tft_.drawCircle(cx, cy, 20, TFT_GOLD);
+  tft_.drawCircle(cx, cy, 19, TFT_GOLD);
+  tft_.fillTriangle(cx - 5, cy - 9, cx - 5, cy + 9, cx + 10, cy, TFT_WHITE);
 }
 
 void DisplayManager::showCalendar(const CalendarState& state, const DeviceSettings& settings, const tm& localTime) {
@@ -135,6 +144,7 @@ void DisplayManager::showCalendar(const CalendarState& state, const DeviceSettin
 
   if (state.christmasGreeting) {
     drawChristmasGreeting();
+    drawPlayButton();
     return;
   }
 
@@ -152,6 +162,8 @@ void DisplayManager::showCalendar(const CalendarState& state, const DeviceSettin
   tft_.setTextDatum(MC_DATUM);
   tft_.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
   tft_.drawString(dateBuf, 160, 222, 2);
+
+  drawPlayButton();
 }
 
 void DisplayManager::showTimeError() {
