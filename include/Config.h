@@ -29,15 +29,23 @@ namespace AppConfig {
   constexpr uint8_t TOUCH_CS   = 33;
   constexpr uint8_t TOUCH_IRQ  = 36;
 
-  // Typowe wartosci kalibracji CYD. Po pierwszym tescie mozna je skorygowac.
   constexpr int TOUCH_X_MIN = 180;
   constexpr int TOUCH_X_MAX = 3800;
   constexpr int TOUCH_Y_MIN = 240;
   constexpr int TOUCH_Y_MAX = 3860;
 
-  // Wbudowany wzmacniacz/speaker connector CYD. Zarezerwowany dla audio v2.
+  // Audio dopasowane do tej rewizji CYD:
+  // DAC2/GPIO26 -> wbudowany wzmacniacz. Testy pokazaly, ze ok. +/-8
+  // wokol 128 daje najlepszy kompromis glosnosc/znieksztalcenia.
   constexpr uint8_t AUDIO_DAC_PIN = 26;
-  constexpr bool AUDIO_FEATURE_ENABLED = false;
+  constexpr uint8_t AUDIO_DAC_AMPLITUDE = 8;
+  constexpr bool AUDIO_FEATURE_ENABLED = true;
+
+  // Pole dotykowe przycisku Play w prawym gornym rogu.
+  constexpr int16_t PLAY_X1 = 264;
+  constexpr int16_t PLAY_Y1 = 0;
+  constexpr int16_t PLAY_X2 = 319;
+  constexpr int16_t PLAY_Y2 = 56;
 
   constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 18000;
   constexpr uint32_t NTP_SYNC_TIMEOUT_MS = 15000;
