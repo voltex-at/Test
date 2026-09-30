@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v4.2 ES3C28P
+name: Build Weihnachtsuhr v4.3 ES3C28P
 
 on:
   push:
@@ -9,33 +9,52 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP32 core and libraries
+      - name: Install ESP32-S3 core and libraries
         run: |
+          set -euxo pipefail
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli lib update-index
           arduino-cli lib install "TJpg_Decoder"
           arduino-cli lib install "Adafruit GFX Library"
+          mkdir -p "$HOME/Arduino/libraries"
+          git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v4.2 source payload
+      - name: Restore v4.3 source and embedded artwork
         run: |
-          cat payload/part_* > /tmp/v42.b64
-          base64 -d /tmp/v42.b64 | tar -xz
-          mkdir -p sketch/Weihnachtsuhr_v42_ES3C28P
-          cp v42_s3/include/* sketch/Weihnachtsuhr_v42_ES3C28P/
-          cp v42_s3/src/*.cpp sketch/Weihnachtsuhr_v42_ES3C28P/
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v42_ES3C28P/Weihnachtsuhr_v42_ES3C28P.ino
-          ls -lh sketch/Weihnachtsuhr_v42_ES3C28P | head
+          set -euxo pipefail
+          mkdir -p /tmp/v43src sketch/Weihnachtsuhr_v43_ES3C28P
+          cat payload/part_* > /tmp/v43.b64
+          base64 -d /tmp/v43.b64 | tar -xz -C /tmp/v43src
+          cp /tmp/v43src/include/* sketch/Weihnachtsuhr_v43_ES3C28P/
+          cp /tmp/v43src/src/*.cpp sketch/Weihnachtsuhr_v43_ES3C28P/
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v43_ES3C28P/Weihnachtsuhr_v43_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v43_ES3C28P/partitions.csv <<'EOF'
+          # Name,   Type, SubType, Offset,   Size,     Flags
+          nvs,      data, nvs,     0x9000,   0x5000,
+          otadata,  data, ota,     0xe000,   0x2000,
+          app0,     app,  ota_0,   0x10000,  0x600000,
+          app1,     app,  ota_1,   0x610000, 0x600000,
+          spiffs,   data, spiffs,  0xC10000, 0x3E0000,
+          EOF
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v43_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v43_ES3C28P | head -40
 
-      - name: Compile ESP32-S3
+      - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
+          set -euxo pipefail
           mkdir -p build
-          arduino-cli compile             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PartitionScheme=huge_app"             --output-dir build             sketch/Weihnachtsuhr_v42_ES3C28P
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
+            --build-property upload.maximum_size=6291456 \
+            --output-dir build \
+            sketch/Weihnachtsuhr_v43_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -47,25 +66,27 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.2_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.3_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.2_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.3_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v4.2 - ES3C28P port"
+            echo "Weihnachtsuhr v4.3 - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
-            echo "Factory artwork embedded in firmware"
+            echo "Factory artwork embedded in firmware, including Grincz"
+            echo "User images and music on SD; MP3/WAV/AAC/M4A/FLAC player and web upload"
             echo "Git commit: $GITHUB_SHA"
             echo
             sha256sum dist/*.bin
           } > dist/build-info.txt
           ls -lh dist
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v4.2-BIN
+          name: Weihnachtsuhr-ES3C28P-v4.3-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
