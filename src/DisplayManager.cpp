@@ -3,7 +3,18 @@
 #include <SD_MMC.h>
 #include <TJpg_Decoder.h>
 
-TFT_eSPI* DisplayManager::callbackTft_ = nullptr;
+namespace {
+constexpr uint16_t C_BLACK     = 0x0000;
+constexpr uint16_t C_NAVY      = 0x000F;
+constexpr uint16_t C_DARKGREY  = 0x7BEF;
+constexpr uint16_t C_WHITE     = 0xFFFF;
+constexpr uint16_t C_YELLOW    = 0xFFE0;
+constexpr uint16_t C_GOLD      = 0xFEA0;
+constexpr uint16_t C_GREEN     = 0x07E0;
+constexpr uint16_t C_LIGHTGREY = 0xD69A;
+}
+
+RawIli9341* DisplayManager::callbackTft_ = nullptr;
 
 bool DisplayManager::jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap) {
   if (!callbackTft_) return false;
@@ -13,29 +24,9 @@ bool DisplayManager::jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uin
 }
 
 bool DisplayManager::begin() {
-  pinMode(AppConfig::TFT_BACKLIGHT_PIN, OUTPUT);
-  digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, HIGH);
-
-  tft_.init();
-
-  // ES3C28P uses an ILI9341V IPS panel. The manufacturer's demo uses a
-  // slightly different init path than generic ILI9341 modules. Force the
-  // exact command sequence that already worked on this physical board.
-  tft_.writecommand(0x01); delay(120); // SWRESET
-  tft_.writecommand(0x11); delay(120); // SLPOUT
-  tft_.writecommand(0x3A); tft_.writedata(0x55); // RGB565
-  tft_.writecommand(0x36); tft_.writedata(0x28); // landscape + BGR
-  tft_.writecommand(0x21);                         // inversion ON for IPS
-  tft_.writecommand(0x29); delay(20);              // display ON
-
-  tft_.setRotation(AppConfig::TFT_ROTATION);
-  tft_.invertDisplay(true);
-  digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, HIGH);
-  tft_.fillScreen(TFT_BLACK);
-  tft_.setTextWrap(false);
-
+  if (!tft_.begin()) return false;
   callbackTft_ = &tft_;
-  TJpgDec.setSwapBytes(true);
+  TJpgDec.setSwapBytes(false);
   TJpgDec.setJpgScale(1);
   TJpgDec.setCallback(jpgOutput);
   return true;
@@ -52,16 +43,31 @@ bool DisplayManager::beginSd() {
 }
 
 void DisplayManager::setBrightness(uint8_t percent) {
-  digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, percent == 0 ? LOW : HIGH);
+  tft_.setBacklight(percent != 0);
+}
+
+void DisplayManager::drawCentered(const String& text, int16_t y, uint8_t size,
+                                  uint16_t fg, uint16_t bg, bool opaque) {
+  tft_.setTextSize(size);
+  tft_.setTextColor(fg, bg);
+  int16_t x1, y1;
+  uint16_t w, h;
+  tft_.getTextBounds(text, 0, y, &x1, &y1, &w, &h);
+  const int16_t x = (320 - static_cast<int16_t>(w)) / 2;
+  if (opaque) tft_.fillRect(x - 4, y - 3, w + 8, h + 6, bg);
+  tft_.setCursor(x, y);
+  tft_.print(text);
+}
+
+void DisplayManager::drawCenteredNumber(int value, int16_t y, uint8_t size,
+                                        uint16_t fg, uint16_t bg) {
+  drawCentered(String(value), y, size, fg, bg, true);
 }
 
 void DisplayManager::showBoot(const String& text) {
-  tft_.fillScreen(TFT_NAVY);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_WHITE, TFT_NAVY);
-  tft_.drawString("WEIHNACHTSUHR", 160, 88, 4);
-  tft_.setTextColor(TFT_GOLD, TFT_NAVY);
-  tft_.drawString(text, 160, 135, 2);
+  tft_.fillScreen(C_NAVY);
+  drawCentered("WEIHNACHTSUHR", 78, 3, C_WHITE, C_NAVY);
+  drawCentered(text, 125, 2, C_GOLD, C_NAVY);
 }
 
 bool DisplayManager::drawJpg(const char* path, const char* fallback) {
@@ -79,82 +85,64 @@ bool DisplayManager::drawJpg(const char* path, const char* fallback) {
 
 void DisplayManager::showWifiStatus(const String& title, const String& line1, const String& line2) {
   if (!drawJpg("/images/board.jpg", "/images/wifi.jpg")) {
-    tft_.fillScreen(TFT_DARKGREY);
+    tft_.fillScreen(C_DARKGREY);
   }
-
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_WHITE);
-  tft_.drawString(title, 190, 78, 4);
-  tft_.setTextColor(TFT_YELLOW);
-  tft_.drawString(line1, 190, 118, 2);
-  if (line2.length()) {
-    tft_.setTextColor(TFT_WHITE);
-    tft_.drawString(line2, 190, 145, 2);
-  }
+  drawCentered(title, 62, 3, C_WHITE, C_DARKGREY);
+  drawCentered(line1, 110, 2, C_YELLOW, C_DARKGREY);
+  if (line2.length()) drawCentered(line2, 145, 2, C_WHITE, C_DARKGREY);
 }
 
 void DisplayManager::drawCountdownPanel(int days) {
-  tft_.fillRoundRect(74, 55, 172, 122, 12, TFT_BLACK);
-  tft_.drawRoundRect(74, 55, 172, 122, 12, TFT_GOLD);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString("NOCH", 160, 76, 4);
+  tft_.fillRoundRect(74, 55, 172, 122, 12, C_BLACK);
+  tft_.drawRoundRect(74, 55, 172, 122, 12, C_GOLD);
 
-  tft_.setTextColor(TFT_GOLD, TFT_BLACK);
-  tft_.drawNumber(days, 160, 119, 7);
-
-  tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString(days == 1 ? "TAG" : "TAGE", 160, 151, 4);
-  tft_.drawString("BIS WEIHNACHTEN", 160, 169, 2);
+  drawCentered("NOCH", 67, 2, C_WHITE, C_BLACK);
+  drawCenteredNumber(days, 96, 5, C_GOLD, C_BLACK);
+  drawCentered(days == 1 ? "TAG" : "TAGE", 145, 2, C_WHITE, C_BLACK);
+  drawCentered("BIS WEIHNACHTEN", 166, 1, C_WHITE, C_BLACK);
 }
 
 void DisplayManager::drawChristmasGreeting() {
-  tft_.fillRoundRect(34, 66, 252, 104, 14, TFT_BLACK);
-  tft_.drawRoundRect(34, 66, 252, 104, 14, TFT_GOLD);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_GOLD, TFT_BLACK);
-  tft_.drawString("FROHE", 160, 94, 4);
-  tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString("WEIHNACHTEN", 160, 132, 4);
-  tft_.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft_.drawString("24 - 26 DEZEMBER", 160, 158, 2);
+  tft_.fillRoundRect(34, 66, 252, 104, 14, C_BLACK);
+  tft_.drawRoundRect(34, 66, 252, 104, 14, C_GOLD);
+  drawCentered("FROHE", 83, 3, C_GOLD, C_BLACK);
+  drawCentered("WEIHNACHTEN", 121, 2, C_WHITE, C_BLACK);
+  drawCentered("24 - 26 DEZEMBER", 151, 1, C_GREEN, C_BLACK);
 }
 
 void DisplayManager::drawBirthdayHeader(const String& name) {
-  tft_.fillRoundRect(64, 7, 192, 38, 10, TFT_BLACK);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_GOLD, TFT_BLACK);
+  tft_.fillRoundRect(34, 7, 252, 38, 10, C_BLACK);
   String text = "HAPPY BIRTHDAY";
   if (name.length()) text += " " + name;
   if (text.length() > 24) text = "HAPPY BIRTHDAY!";
-  tft_.drawString(text, 160, 26, 2);
+  drawCentered(text, 18, 1, C_GOLD, C_BLACK);
 }
 
 void DisplayManager::drawSceneTag(SceneType scene) {
   if (scene == SceneType::NORMAL || scene == SceneType::BIRTHDAY || scene == SceneType::CHRISTMAS) return;
   const char* label = CalendarEngine::sceneLabel(scene);
   if (!label || !*label) return;
-  tft_.fillRoundRect(8, 8, 110, 28, 7, TFT_BLACK);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString(label, 63, 22, 2);
+  tft_.fillRoundRect(8, 8, 110, 28, 7, C_BLACK);
+  tft_.setTextSize(1);
+  tft_.setTextColor(C_WHITE, C_BLACK);
+  tft_.setCursor(16, 18);
+  tft_.print(label);
 }
 
 void DisplayManager::drawPlayButton() {
   if (!AppConfig::AUDIO_FEATURE_ENABLED) return;
-
   const int16_t cx = 292;
   const int16_t cy = 27;
-  tft_.fillCircle(cx, cy, 20, TFT_BLACK);
-  tft_.drawCircle(cx, cy, 20, TFT_GOLD);
-  tft_.drawCircle(cx, cy, 19, TFT_GOLD);
-  tft_.fillTriangle(cx - 5, cy - 9, cx - 5, cy + 9, cx + 10, cy, TFT_WHITE);
+  tft_.fillCircle(cx, cy, 20, C_BLACK);
+  tft_.drawCircle(cx, cy, 20, C_GOLD);
+  tft_.drawCircle(cx, cy, 19, C_GOLD);
+  tft_.fillTriangle(cx - 5, cy - 9, cx - 5, cy + 9, cx + 10, cy, C_WHITE);
 }
 
 void DisplayManager::showCalendar(const CalendarState& state, const DeviceSettings& settings, const tm& localTime) {
   const char* image = CalendarEngine::sceneImage(state.scene);
   if (!drawJpg(image, "/images/normal.jpg")) {
-    tft_.fillScreen(TFT_NAVY);
+    tft_.fillScreen(C_NAVY);
   }
 
   if (state.christmasGreeting) {
@@ -163,20 +151,16 @@ void DisplayManager::showCalendar(const CalendarState& state, const DeviceSettin
     return;
   }
 
-  if (state.birthday) {
-    drawBirthdayHeader(settings.birthdayName);
-  } else {
-    drawSceneTag(state.scene);
-  }
+  if (state.birthday) drawBirthdayHeader(settings.birthdayName);
+  else drawSceneTag(state.scene);
 
   drawCountdownPanel(state.daysToChristmas);
 
   char dateBuf[20];
-  snprintf(dateBuf, sizeof(dateBuf), "%02d.%02d.%04d", localTime.tm_mday, localTime.tm_mon + 1, localTime.tm_year + 1900);
-  tft_.fillRoundRect(100, 211, 120, 22, 6, TFT_BLACK);
-  tft_.setTextDatum(MC_DATUM);
-  tft_.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  tft_.drawString(dateBuf, 160, 222, 2);
+  snprintf(dateBuf, sizeof(dateBuf), "%02d.%02d.%04d",
+           localTime.tm_mday, localTime.tm_mon + 1, localTime.tm_year + 1900);
+  tft_.fillRoundRect(100, 211, 120, 22, 6, C_BLACK);
+  drawCentered(String(dateBuf), 217, 1, C_LIGHTGREY, C_BLACK);
 
   drawPlayButton();
 }
