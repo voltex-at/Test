@@ -1,6 +1,6 @@
 #pragma once
 #include <Arduino.h>
-#include <TFT_eSPI.h>
+#include "RawIli9341.h"
 #include "CalendarEngine.h"
 #include "SettingsManager.h"
 
@@ -16,7 +16,7 @@ public:
   void setBrightness(uint8_t percent);
 
 private:
-  TFT_eSPI tft_;
+  RawIli9341 tft_;
   bool sdReady_ = false;
 
   bool drawJpg(const char* path, const char* fallback = nullptr);
@@ -25,6 +25,9 @@ private:
   void drawBirthdayHeader(const String& name);
   void drawSceneTag(SceneType scene);
   void drawPlayButton();
+
+  void drawCentered(const String& text, int16_t y, uint8_t size, uint16_t fg, uint16_t bg, bool opaque = true);
+  void drawCenteredNumber(int value, int16_t y, uint8_t size, uint16_t fg, uint16_t bg);
   static bool jpgOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);
-  static TFT_eSPI* callbackTft_;
+  static RawIli9341* callbackTft_;
 };
