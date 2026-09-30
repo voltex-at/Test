@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v4.3 ES3C28P
+name: Build Weihnachtsuhr v4.4 ES3C28P
 
 on:
   push:
@@ -26,16 +26,35 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v4.3 source and embedded artwork
+      - name: Restore v4.4 source and embedded artwork
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/v43src sketch/Weihnachtsuhr_v43_ES3C28P
-          cat payload/part_* > /tmp/v43.b64
-          base64 -d /tmp/v43.b64 | tar -xz -C /tmp/v43src
-          cp /tmp/v43src/include/* sketch/Weihnachtsuhr_v43_ES3C28P/
-          cp /tmp/v43src/src/*.cpp sketch/Weihnachtsuhr_v43_ES3C28P/
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v43_ES3C28P/Weihnachtsuhr_v43_ES3C28P.ino
-          cat > sketch/Weihnachtsuhr_v43_ES3C28P/partitions.csv <<'EOF'
+          mkdir -p /tmp/v44src sketch/Weihnachtsuhr_v44_ES3C28P
+          cat payload/part_* > /tmp/v44.b64
+          base64 -d /tmp/v44.b64 | tar -xz -C /tmp/v44src
+          cp /tmp/v44src/include/* sketch/Weihnachtsuhr_v44_ES3C28P/
+          cp /tmp/v44src/src/*.cpp sketch/Weihnachtsuhr_v44_ES3C28P/
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("sketch/Weihnachtsuhr_v44_ES3C28P/Touch.h")
+          s=p.read_text()
+          s=s.replace('pinMode(RST,OUTPUT);pinMode(IRQ,INPUT_PULLUP);digitalWrite(RST,LOW);delay(10);digitalWrite(RST,HIGH);delay(250);\n  Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);',
+                      'Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);\n  pinMode(RST,OUTPUT);pinMode(IRQ,INPUT);digitalWrite(RST,LOW);delay(12);digitalWrite(RST,HIGH);delay(320);')
+          p.write_text(s)
+          p=Path("sketch/Weihnachtsuhr_v44_ES3C28P/main.cpp")
+          s=p.read_text()
+          old='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  if(digitalRead(touch::IRQ)){touchHeld=false;return;}if(touchHeld)return;\n  touch::Point p;if(!touch::raw(p))return;touchHeld=true;'''
+          new='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  // FT6336G is polled over I2C. Do not gate reads on INT: some ES3C28P\n  // revisions keep INT high unless the controller is explicitly configured.\n  touch::Point p;\n  if(!touch::raw(p)){touchHeld=false;return;}\n  if(touchHeld)return;\n  touchHeld=true;'''
+          if old not in s: raise SystemExit("pollTouch pattern not found")
+          s=s.replace(old,new)
+          old_cfg='''  screen::text(lcd,"Wi-Fi",190,80,&FreeSerifBold9pt7b,screen::CREAM,156);\n  lcd.setTextDatum(MC_DATUM);lcd.setTextColor(screen::CREAM);\n  lcd.drawString(apName,190,101,2);\n  screen::text(lcd,tr("Passwort","Haslo","Password"),190,120,&FreeSerif9pt7b,screen::CREAM,156);\n  screen::text(lcd,adminPassword,190,140,&FreeSans9pt7b,screen::CREAM,156);\n  screen::text(lcd,"192.168.4.1",190,160,&FreeSans9pt7b,screen::CREAM,156);'''
+          new_cfg='''  screen::text(lcd,"Wi-Fi",190,76,&FreeSerifBold9pt7b,screen::CREAM,148);\n  screen::text(lcd,apName,190,101,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,tr("Passwort","Haslo","Password"),190,122,&FreeSerif9pt7b,screen::CREAM,148);\n  screen::text(lcd,adminPassword,190,143,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,"192.168.4.1",190,164,&FreeSans9pt7b,screen::CREAM,150);'''
+          if old_cfg not in s: raise SystemExit("drawConfig pattern not found")
+          s=s.replace(old_cfg,new_cfg)
+          p.write_text(s)
+          PY
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v44_ES3C28P/Weihnachtsuhr_v44_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v44_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
           otadata,  data, ota,     0xe000,   0x2000,
@@ -43,8 +62,8 @@ jobs:
           app1,     app,  ota_1,   0x610000, 0x600000,
           spiffs,   data, spiffs,  0xC10000, 0x3E0000,
           EOF
-          grep -R "grincz" -n sketch/Weihnachtsuhr_v43_ES3C28P | head || true
-          ls -lh sketch/Weihnachtsuhr_v43_ES3C28P | head -40
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v44_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v44_ES3C28P | head -40
 
       - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
@@ -54,7 +73,7 @@ jobs:
             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
             --build-property upload.maximum_size=6291456 \
             --output-dir build \
-            sketch/Weihnachtsuhr_v43_ES3C28P
+            sketch/Weihnachtsuhr_v44_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -66,14 +85,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.3_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.4_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.3_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.4_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v4.3 - ES3C28P"
+            echo "Weihnachtsuhr v4.4 - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
             echo "Factory artwork embedded in firmware, including Grincz"
             echo "User images and music on SD; MP3/WAV/AAC/M4A/FLAC player and web upload"
@@ -86,7 +105,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v4.3-BIN
+          name: Weihnachtsuhr-ES3C28P-v4.4-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
