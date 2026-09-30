@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr ESP32 BIN
+name: Build Weihnachtsuhr ES3C28P BIN
 
 on:
   push:
@@ -12,39 +12,49 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
 
-      - name: Install PlatformIO
-        run: pip install platformio
+      - name: Install ESP32 core 3.3.2
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
-      - name: Build firmware
-        run: pio run -e cyd-esp32-2432s028r
+      - name: Restore firmware source
+        run: |
+          mkdir -p firmware_es3c28p/firmware_es3c28p
+          base64 -d firmware_es3c28p/main.cpp.gz.b64 | gzip -d > firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
+          wc -l firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
+
+      - name: Compile ESP32-S3 firmware
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32s3 \
+            --output-dir build \
+            firmware_es3c28p/firmware_es3c28p
+          ls -lah build
 
       - name: Prepare BIN files
         shell: bash
         run: |
           set -euxo pipefail
-          ENV_DIR=".pio/build/cyd-esp32-2432s028r"
           mkdir -p dist
-          cp "$ENV_DIR/firmware.bin" dist/firmware.bin
-          cp "$ENV_DIR/bootloader.bin" dist/bootloader.bin
-          cp "$ENV_DIR/partitions.bin" dist/partitions.bin
-          BOOT_APP0="$(find ~/.platformio/packages -type f -name boot_app0.bin | head -n 1)"
-          cp "$BOOT_APP0" dist/boot_app0.bin
-          ESPTOOL="$(find ~/.platformio/packages -type f -name esptool.py | head -n 1)"
-          python "$ESPTOOL" --chip esp32 merge_bin -o dist/full_flash.bin \
-            --flash_mode dio --flash_freq 40m --flash_size 4MB \
-            0x1000 dist/bootloader.bin \
-            0x8000 dist/partitions.bin \
-            0xe000 dist/boot_app0.bin \
-            0x10000 dist/firmware.bin
+          APP="$(find build -maxdepth 1 -type f -name '*.ino.bin' | head -n1)"
+          BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
+          PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v1.0_firmware.bin
+          cp "$BOOT" dist/bootloader.bin
+          cp "$PART" dist/partitions.bin
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v1.0_full_flash.bin
+          fi
           {
-            echo "Project: Weihnachtsuhr"
-            echo "Board: ESP32-2432S028R / esp32dev"
-            echo "Environment: cyd-esp32-2432s028r"
+            echo "Project: Weihnachtsuhr ES3C28P v1.0"
+            echo "Board: ESP32-S3 / ES3C28P"
+            echo "Arduino-ESP32: 3.3.2"
+            echo "FQBN: esp32:esp32:esp32s3"
             echo "Git commit: $GITHUB_SHA"
             echo
             sha256sum dist/*.bin
@@ -54,7 +64,7 @@ jobs:
       - name: Upload compiled binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ESP32-BIN
+          name: Weihnachtsuhr-ES3C28P-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
