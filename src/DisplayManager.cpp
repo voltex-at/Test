@@ -1,7 +1,6 @@
 #include "DisplayManager.h"
 #include "Config.h"
-#include <SPI.h>
-#include <SD.h>
+#include <SD_MMC.h>
 #include <TJpg_Decoder.h>
 
 TFT_eSPI* DisplayManager::callbackTft_ = nullptr;
@@ -30,13 +29,16 @@ bool DisplayManager::begin() {
 }
 
 bool DisplayManager::beginSd() {
-  SPI.begin(AppConfig::SD_SCK, AppConfig::SD_MISO, AppConfig::SD_MOSI, AppConfig::SD_CS);
-  sdReady_ = SD.begin(AppConfig::SD_CS, SPI, 20000000);
+  if (!SD_MMC.setPins(AppConfig::SD_CLK, AppConfig::SD_CMD, AppConfig::SD_D0,
+                      AppConfig::SD_D1, AppConfig::SD_D2, AppConfig::SD_D3)) {
+    sdReady_ = false;
+    return false;
+  }
+  sdReady_ = SD_MMC.begin("/sdcard", false, false);
   return sdReady_;
 }
 
 void DisplayManager::setBrightness(uint8_t percent) {
-  // Bez PWM - testy audio pokazaly, ze statyczny stan podswietlenia jest najczystszy.
   digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, percent == 0 ? LOW : HIGH);
 }
 
@@ -51,12 +53,12 @@ void DisplayManager::showBoot(const String& text) {
 
 bool DisplayManager::drawJpg(const char* path, const char* fallback) {
   if (!sdReady_) return false;
-  if (SD.exists(path)) {
-    TJpgDec.drawSdJpg(0, 0, path);
+  if (SD_MMC.exists(path)) {
+    TJpgDec.drawFsJpg(0, 0, path, SD_MMC);
     return true;
   }
-  if (fallback && SD.exists(fallback)) {
-    TJpgDec.drawSdJpg(0, 0, fallback);
+  if (fallback && SD_MMC.exists(fallback)) {
+    TJpgDec.drawFsJpg(0, 0, fallback, SD_MMC);
     return true;
   }
   return false;
