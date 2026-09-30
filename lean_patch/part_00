@@ -1,0 +1,315 @@
+--- a/include/Calendar.h
++++ b/include/Calendar.h
+@@ -13,18 +13,20 @@
+   for(int m=1;m<d.month;++m)n+=monthDays(d.year,m);
+   return n;
+ }
++// Christmas mode special scenes. Grincz is intentionally shown on 24.12 and 06.01.
+ inline Scene scene(Date d) {
+   if(d.month==1&&d.day==6)return Scene::Grincz;
+   if(d.month!=12)return Scene::Countdown;
+-  if(d.day>=24&&d.day<=26)return Scene::Christmas;
+   if(d.day==5)return Scene::Krampus;
+   if(d.day==6)return Scene::Nikolaus;
+-  if(d.day==27)return Scene::Grincz;
++  if(d.day==24)return Scene::Grincz;
++  if(d.day>=25&&d.day<=26)return Scene::Christmas;
+   return Scene::Countdown;
+ }
++inline bool christmasGreeting(Date d){return d.month==12&&d.day>=24&&d.day<=26;}
+ inline int daysToChristmas(Date d) {
+   if(!valid(d))return -1;
+-  if(scene(d)==Scene::Christmas)return 0;
++  if(christmasGreeting(d))return 0;
+   return ordinal({d.year+(d.month==12&&d.day>26),12,24})-ordinal(d);
+ }
+ inline bool birthday(Date d,int month,int day) {return d.month==month&&d.day==day;}
+@@ -32,8 +34,4 @@
+   switch(s) {case Scene::Krampus:return "Krampus";case Scene::Nikolaus:return "Nikolaus";
+     case Scene::Christmas:return "Frohe Weihnachten";case Scene::Grincz:return "Grincz";default:return "Weihnachts-Countdown";}
+ }
+-inline const char* imagePath(Scene s) {
+-  switch(s) {case Scene::Krampus:return "/images/krampus.bmp";case Scene::Nikolaus:return "/images/nikolaus.bmp";
+-    case Scene::Christmas:return "/images/christmas.bmp";case Scene::Grincz:return "/images/grincz.bmp";default:return "/images/countdown.bmp";}
+-}
+ }
+--- a/include/Countdown.h
++++ b/include/Countdown.h
+@@ -3,19 +3,27 @@
+ #include <stdint.h>
+ #include <string.h>
+ namespace countdown {
+-enum Mode:uint8_t {Christmas,Birthday,Valentines,Easter,Vacation,Halloween};
++// Numeric values 0..5 stay compatible with older NVS. Value 2 is the retired
++// Valentine's mode and is migrated to Christmas when settings are loaded.
++enum Mode:uint8_t {Christmas=0,Birthday=1,LegacyValentines=2,Easter=3,Vacation=4,Halloween=5,Silvester=6};
+ struct Config {
+  uint32_t magic=0x43445431;
+  uint8_t mode=Christmas,birthMonth=0,birthDay=0,vacMonth=0,vacDay=0,reserved=0;
+  uint16_t vacYear=0;
+  char name[49]={};
+ };
+-inline const char* code(uint8_t mode){const char* names[]={"christmas","birthday","valentines","easter","vacation","halloween"};return mode<=Halloween?names[mode]:names[0];}
+-inline int index(const char* s){for(int i=0;i<=Halloween;++i)if(!strcmp(s,code(i)))return i;return -1;}
++inline const char* code(uint8_t mode){
++ switch(mode){case Birthday:return "birthday";case Easter:return "easter";case Vacation:return "vacation";case Halloween:return "halloween";case Silvester:return "silvester";default:return "christmas";}
++}
++inline int index(const char* s){
++ if(!strcmp(s,"christmas"))return Christmas;if(!strcmp(s,"birthday"))return Birthday;if(!strcmp(s,"easter"))return Easter;
++ if(!strcmp(s,"vacation"))return Vacation;if(!strcmp(s,"halloween"))return Halloween;if(!strcmp(s,"silvester"))return Silvester;return -1;
++}
++inline bool knownMode(uint8_t m){return m==Christmas||m==Birthday||m==LegacyValentines||m==Easter||m==Vacation||m==Halloween||m==Silvester;}
+ inline bool validConfig(const Config& c){
+  bool b=(!c.birthMonth&&!c.birthDay)||peppi::valid({2024,c.birthMonth,c.birthDay});
+  bool v=(!c.vacYear&&!c.vacMonth&&!c.vacDay)||peppi::valid({c.vacYear,c.vacMonth,c.vacDay});
+- return c.magic==0x43445431&&c.mode<=Halloween&&memchr(c.name,0,sizeof(c.name))&&b&&v;
++ return c.magic==0x43445431&&knownMode(c.mode)&&memchr(c.name,0,sizeof(c.name))&&b&&v;
+ }
+ inline bool configured(const Config& c){return validConfig(c)&&(c.mode!=Birthday||c.birthMonth)&&(c.mode!=Vacation||c.vacYear);}
+ // Gregorian Easter, Oudin algorithm documented by the US Naval Observatory.
+@@ -25,25 +33,26 @@
+ struct Result {bool configured=false,today=false,started=false;int days=-1;peppi::Date target{0,0,0};};
+ inline Result calculate(peppi::Date now,const Config& c){
+  Result r;r.configured=countdown::configured(c);if(!r.configured||!peppi::valid(now))return r;
+- int y=now.year;
+- switch(c.mode){
++ uint8_t mode=c.mode==LegacyValentines?Christmas:c.mode;int y=now.year;
++ switch(mode){
+  case Christmas:r.target={y+(now.month==12&&now.day>26),12,24};break;
+- case Valentines:r.target={y,2,14};break;
++ case Silvester:r.target={y,12,31};break;
+  case Halloween:r.target={y,10,31};break;
+  case Easter:r.target=easter(y);break;
+  case Vacation:r.target={c.vacYear,c.vacMonth,c.vacDay};break;
+  case Birthday:
+    while(c.birthDay>peppi::monthDays(y,c.birthMonth))++y;
+    r.target={y,c.birthMonth,c.birthDay};break;
++ default:r.target={y,12,24};break;
+  }
+  int delta=peppi::ordinal(r.target)-peppi::ordinal(now);
+- if(c.mode==Christmas&&peppi::scene(now)==peppi::Scene::Christmas)delta=0;
+- else if(delta<0&&c.mode!=Vacation){
++ if(mode==Christmas&&peppi::christmasGreeting(now))delta=0;
++ else if(delta<0&&mode!=Vacation){
+    y=r.target.year+1;
+-   if(c.mode==Easter)r.target=easter(y);
+-   else {while(c.mode==Birthday&&c.birthDay>peppi::monthDays(y,c.birthMonth))++y;r.target.year=y;}
++   if(mode==Easter)r.target=easter(y);
++   else {while(mode==Birthday&&c.birthDay>peppi::monthDays(y,c.birthMonth))++y;r.target.year=y;}
+    delta=peppi::ordinal(r.target)-peppi::ordinal(now);
+  }
+- r.today=delta==0;r.started=c.mode==Vacation&&delta<=0;r.days=delta<0?0:delta;return r;
++ r.today=delta==0;r.started=mode==Vacation&&delta<=0;r.days=delta<0?0:delta;return r;
+ }
+ }
+--- a/include/MusicPlayer.h
++++ b/include/MusicPlayer.h
+@@ -50,13 +50,13 @@
+ inline void applyVolume(){audio().setVolume((uint8_t)min<unsigned>(100,volume.load()));}
+ inline bool supported(const String& name){String n=name;n.toLowerCase();return n.endsWith(".mp3")||n.endsWith(".wav")||n.endsWith(".m4a")||n.endsWith(".aac")||n.endsWith(".flac");}
+ inline String safeCategory(const String& in){
+-  static const char* allowed[]={"christmas","silvester","birthday","krampus","nikolaus","grincz","halloween","easter","valentines","vacation","normal"};
++  static const char* allowed[]={"christmas","silvester","birthday","halloween","easter","vacation"};
+   for(auto a:allowed)if(in==a)return in;return "christmas";
+ }
+ inline String folder(){return String("/media/music/")+safeCategory(category);}
+ inline void ensureFolders(){
+   SD_MMC.mkdir("/media");SD_MMC.mkdir("/media/music");SD_MMC.mkdir("/media/images");
+-  static const char* k[]={"christmas","silvester","birthday","krampus","nikolaus","grincz","halloween","easter","valentines","vacation","normal"};
++  static const char* k[]={"christmas","silvester","birthday","halloween","easter","vacation"};
+   for(auto s:k){SD_MMC.mkdir((String("/media/music/")+s).c_str());SD_MMC.mkdir((String("/media/images/")+s).c_str());}
+ }
+ inline bool scan(const String& key){
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -41,7 +41,7 @@
+ // Arduino 2.0.17 otherwise derives a timeout of just 3 seconds from 150ms/channel.
+ struct ScanGuard:WiFiScanClass{static void extendTimeout(){_scanTimeout=scanTiming::TIMEOUT_MS;}};
+ String adminPassword,csrf,apName;
+-String wallpaper="normal";
++String wallpaper="christmas";
+ bool playerScreen=false;
+ bool audioNotice=false;
+ File uploadFile;
+@@ -105,47 +105,33 @@
+ bool jpgOutput(int16_t x,int16_t y,uint16_t w,uint16_t h,uint16_t* pixels){
+   if(x<0||y<0||x+w>320||y+h>240)return false;lcd.pushImage(x,y,w,h,pixels);return true;
+ }
+-bool validWallpaper(const String& s){return s=="normal"||s=="normal_alt"||s=="grincz"||s=="grincz_alt"||s=="board";}
++bool validWallpaper(const String& s){return s=="christmas";}
+ const char* eventTitle(){
+   switch(eventSettings.mode){
+     case countdown::Birthday:return tr("Geburtstag","Urodziny","Birthday");
+-    case countdown::Valentines:return tr("Valentinstag","Walentynki","Valentine's Day");
+     case countdown::Easter:return tr("Ostern","Wielkanoc","Easter");
+     case countdown::Vacation:return tr("Urlaub","Urlop","Vacation");
+     case countdown::Halloween:return "Halloween";
++    case countdown::Silvester:return tr("Silvester","Sylwester","New Year");
+     default:return tr("Weihnachten","Swieta","Christmas");
+   }
+ }
++// Wi-Fi and MP3 artwork/music are assigned to the selected Countdown Mode,
++// not to temporary Christmas special scenes.
+ String currentMediaKey(){
+   switch(eventSettings.mode){
+     case countdown::Birthday:return "birthday";
+-    case countdown::Valentines:return "valentines";
+     case countdown::Easter:return "easter";
+     case countdown::Vacation:return "vacation";
+     case countdown::Halloween:return "halloween";
+-    default:break;
++    case countdown::Silvester:return "silvester";
++    default:return "christmas";
+   }
+-  tm t{};if(!localDate(t))return "christmas";
+-  peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};auto scene=peppi::scene(d);
+-  if(scene==peppi::Scene::Krampus)return "krampus";
+-  if(scene==peppi::Scene::Nikolaus)return "nikolaus";
+-  if(scene==peppi::Scene::Grincz)return "grincz";
+-  if(d.month==12&&d.day==31)return "silvester";
+-  return "christmas";
+-}
+-String wifiArtwork(){
+-  String k=currentMediaKey();
+-  if(k=="birthday")return "wifi_birthday";
+-  if(k=="valentines")return "wifi_valentines";
+-  if(k=="easter")return "wifi_easter";
+-  if(k=="vacation")return "wifi_vacation";
+-  if(k=="halloween")return "wifi_halloween";
+-  if(k=="silvester")return "wifi_silvester";
+-  return "board";
+ }
++String wifiArtwork(){return String("wifi_")+currentMediaKey();}
+ String playerArtwork(){return String("mp3_")+currentMediaKey();}
+ bool safeMediaKey(const String& k){
+-  const char* allowed[]={"christmas","silvester","birthday","krampus","nikolaus","grincz","halloween","easter","valentines","vacation","normal"};
++  const char* allowed[]={"christmas","silvester","birthday","halloween","easter","vacation"};
+   for(auto a:allowed)if(k==a)return true;return false;
+ }
+ String safeFileName(String n){
+@@ -155,27 +141,25 @@
+ }
+ String currentArtwork(){
+   switch(eventSettings.mode){
+-    case countdown::Birthday:return "birthday_generic";
+-    case countdown::Valentines:return "valentines";
++    case countdown::Birthday:return "birthday";
+     case countdown::Easter:return "easter";
+     case countdown::Vacation:return "vacation";
+     case countdown::Halloween:return "halloween";
++    case countdown::Silvester:return "silvester";
+     default:break;
+   }
+-  tm t{};if(!localDate(t))return "normal";
++  tm t{};if(!localDate(t))return "christmas";
+   peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};auto scene=peppi::scene(d);
+-  if(scene==peppi::Scene::Christmas)return "christmas";
+   if(scene==peppi::Scene::Krampus)return "krampus";
+   if(scene==peppi::Scene::Nikolaus)return "nikolaus";
+   if(scene==peppi::Scene::Grincz)return "grincz";
+-  if(d.month==12&&d.day==31)return "silvester";
+-  return "normal";
++  return "christmas";
+ }
++bool customModeArtwork(const String& name){return safeMediaKey(name);}
+ void drawArtwork(const String& name){
+   lcd.setSwapBytes(true);
+-  if(sdReady){
+-    String customKey=name=="birthday_generic"?"birthday":name;
+-    String path=String("/media/images/")+customKey+"/custom.jpg";
++  if(sdReady&&customModeArtwork(name)){
++    String path=String("/media/images/")+name+"/custom.jpg";
+     if(SD_MMC.exists(path)&&TJpgDec.drawFsJpg(0,0,path,SD_MMC)==JDR_OK)return;
+   }
+   const auto& im=artwork::get(name);
+@@ -241,8 +225,8 @@
+ void startCalibration(){forceFull=true;calibrating=true;calibrationStep=0;touchHeld=true;drawCalibration();}
+ void drawClock() {
+   String art=currentArtwork();drawArtwork(art);tm t{};
+-  if(eventSettings.mode!=countdown::Christmas){
+-    bool light=eventSettings.mode==countdown::Birthday||eventSettings.mode==countdown::Valentines||eventSettings.mode==countdown::Easter;
++  if(eventSettings.mode!=countdown::Christmas&&eventSettings.mode!=countdown::LegacyValentines){
++    bool light=eventSettings.mode==countdown::Birthday||eventSettings.mode==countdown::Easter;
+     uint16_t ink=light?0x3024:screen::CREAM,edge=light?screen::CREAM:screen::SHADOW;
+     int cx=eventSettings.mode==countdown::Halloween?206:eventSettings.mode==countdown::Vacation?182:164;
+     auto text=[&](const String& value,int y,const GFXfont* font){screen::text(lcd,value,cx,y,font,ink,204,edge);};
+@@ -253,6 +237,15 @@
+       text(tr("Zeit einstellen","Ustaw czas","Set the time"),93,&FreeSerifBold12pt7b);
+       text(tr("Wi-Fi oder Telefon","Wi-Fi lub telefon","Set the time"),123,&FreeSerif9pt7b);
+     }else{
++      // On New Year's Eve the selected Silvester mode switches to a real
++      // second-by-second countdown for the final 15 seconds of the year.
++      if(eventSettings.mode==countdown::Silvester&&t.tm_mon==11&&t.tm_mday==31&&t.tm_hour==23&&t.tm_min==59&&t.tm_sec>=45){
++        int seconds=60-t.tm_sec;
++        text(tr("Neues Jahr in","Nowy Rok za","New Year in"),48,&FreeSerifBold12pt7b);
++        text(String(seconds),112,&PeppiDigits);
++        text(seconds==1?tr("Sekunde","sekunde","second"):tr("Sekunden","sekund","seconds"),164,&FreeSerif12pt7b);
++        return;
++      }
+       auto result=countdown::calculate({t.tm_year+1900,t.tm_mon+1,t.tm_mday},eventSettings);
+       if(result.today||result.started){
+         text(result.started?tr("Der Urlaub","Urlop","Vacation"):tr("Heute ist","Dzis jest","Today is"),69,&FreeSerif18pt7b);
+@@ -268,30 +261,25 @@
+     }
+     return;
+   }
+-  int x=art=="grincz_alt"?233:art=="krampus"?224:art=="board"?185:art=="normal"?160:190;
+-  int width=art=="grincz_alt"?160:art=="krampus"?174:220;
++  int x=art=="krampus"?224:art=="christmas"?160:190;
++  int width=art=="krampus"?174:220;
+   if(!localDate(t)) {
+     screen::text(lcd,tr("Zeit einstellen","Ustaw czas","Set the time"),x,97,&FreeSerifBold12pt7b,screen::CREAM,width);
+     screen::text(lcd,tr("Wi-Fi oder Telefon","Wi-Fi lub telefon","Wi-Fi or phone"),x,124,&FreeSerif9pt7b,screen::GOLD,width);
+   }
+   else {
+-    peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};auto scene=peppi::scene(d);
+-    if(scene==peppi::Scene::Christmas){
++    peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};
++    if(peppi::christmasGreeting(d)){
++      // 24.12 intentionally uses the Grincz artwork, while the message stays festive.
+       screen::text(lcd,tr("Frohe","Wesolych","Merry"),160,77,&FreeSerifBold18pt7b,screen::GOLD);
+       screen::text(lcd,tr("Weihnachten","Swiat","Christmas"),160,114,&FreeSerifBold18pt7b);
+     }
+     else {
+       int days=peppi::daysToChristmas(d);
+-      if(art=="board"){
+-        screen::text(lcd,tr("Noch","Jeszcze","Only"),x,69,&FreeSerif9pt7b,screen::GOLD,width);
+-        screen::text(lcd,String(days),x,108,&FreeSerifBold24pt7b,screen::CREAM,width);
+-        screen::text(lcd,days==1?tr("Tag bis Weihnachten","dzien do Swiat","day to Christmas"):tr("Tage bis Weihnachten","dni do Swiat","days to Christmas"),x,145,&FreeSerif9pt7b,screen::GOLD,width);
+-      }else{
+-        screen::text(lcd,tr("Noch","Jeszcze","Only"),x-12,40,&FreeSerif18pt7b,screen::GOLD,width);
+-        screen::text(lcd,String(days),x-6,102,&PeppiDigits,screen::CREAM,width);
+-        screen::text(lcd,days==1?tr("Tag bis","dzien do","day until"):tr("Tage bis","dni do","days until"),x,148,&FreeSerif12pt7b,screen::GOLD,width);
+-        screen::text(lcd,tr("Weihnachten","Swiat","Christmas"),x,171,&FreeSerif12pt7b,screen::GOLD,width);
+-      }
++      screen::text(lcd,tr("Noch","Jeszcze","Only"),x-12,40,&FreeSerif18pt7b,screen::GOLD,width);
++      screen::text(lcd,String(days),x-6,102,&PeppiDigits,screen::CREAM,width);
++      screen::text(lcd,days==1?tr("Tag bis","dzien do","day until"):tr("Tage bis","dni do","days until"),x,148,&FreeSerif12pt7b,screen::GOLD,width);
++      screen::text(lcd,tr("Weihnachten","Swiat","Christmas"),x,171,&FreeSerif12pt7b,screen::GOLD,width);
+     }
+   }
+ }
+@@ -299,7 +287,7 @@
+   tm t{};String value;bool hasTime=localDate(t),birthdayGreeting=false;
+   if(hasTime){
+     peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};
+-    birthdayGreeting=eventSettings.mode==countdown::Christmas&&peppi::birthday(d,eventSettings.birthMonth,eventSettings.birthDay)&&peppi::scene(d)==peppi::Scene::Christmas;
++    birthdayGreeting=eventSettings.mode==countdown::Christmas&&peppi::birthday(d,eventSettings.birthMonth,eventSettings.birthDay)&&peppi::christmasGreeting(d);
+     if(birthdayGreeting)value=String(tr("Alles Gute, ","Sto lat, ","Happy birthday, "))+screenName();
+     else {char b[32];snprintf(b,sizeof(b),"%02d.%02d.%04d  %02d:%02d",d.day,d.month,d.year,t.tm_hour,t.tm_min);value=b;}
+   }
+@@ -328,7 +316,10 @@
+   if(calibrating)return;
+   tm t{};bool valid=localDate(t);
+   String key=String(configScreen)+":"+String(playerScreen)+":"+String(settings.language)+":"+apName;
+-  if(!configScreen)key+=":"+currentArtwork()+":"+String(valid?t.tm_year:0)+":"+String(valid?t.tm_yday:0)+":"+String(eventSettings.mode)+":"+String(eventSettings.birthMonth)+":"+String(eventSettings.birthDay)+":"+String(eventSettings.vacYear)+":"+String(eventSettings.vacMonth)+":"+String(eventSettings.vacDay)+":"+String(eventSettings.name);
++  if(!configScreen){
++    key+=":"+currentArtwork()+":"+String(valid?t.tm_year:0)+":"+String(valid?t.tm_yday:0)+":"+String(eventSettings.mode)+":"+String(eventSettings.birthMonth)+":"+String(eventSettings.birthDay)+":"+String(eventSettings.vacYear)+":"+String(eventSettings.vacMonth)+":"+String(eventSettings.vacDay)+":"+String(eventSettings.name);
++    if(valid&&eventSettings.mode==countdown::Silvester&&t.tm_mon==11&&t.tm_mday==31&&t.tm_hour==23&&t.tm_min==59&&t.tm_sec>=45)key+=":"+String(t.tm_sec);
++  }
+   static String previous;bool all=forceFull||key!=previous;
+   if(configScreen){if(all)drawConfig();}
+   else if(playerScreen){if(all)drawPlayer();}
+@@ -391,7 +382,7 @@
+   if(!authorize())return;tm t{};bool valid=localDate(t);peppi::Date d{t.tm_year+1900,t.tm_mon+1,t.tm_mday};auto scene=valid?peppi::scene(d):peppi::Scene::Countdown;
+   char date[32]="";if(valid)snprintf(date,sizeof(date),"%02d.%02d.%04d %02d:%02d",d.day,d.month,d.year,t.tm_hour,t.tm_min);
