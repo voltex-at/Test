@@ -17,7 +17,20 @@ bool DisplayManager::begin() {
   digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, HIGH);
 
   tft_.init();
+
+  // ES3C28P uses an ILI9341V IPS panel. The manufacturer's demo uses a
+  // slightly different init path than generic ILI9341 modules. Force the
+  // exact command sequence that already worked on this physical board.
+  tft_.writecommand(0x01); delay(120); // SWRESET
+  tft_.writecommand(0x11); delay(120); // SLPOUT
+  tft_.writecommand(0x3A); tft_.writedata(0x55); // RGB565
+  tft_.writecommand(0x36); tft_.writedata(0x28); // landscape + BGR
+  tft_.writecommand(0x21);                         // inversion ON for IPS
+  tft_.writecommand(0x29); delay(20);              // display ON
+
   tft_.setRotation(AppConfig::TFT_ROTATION);
+  tft_.invertDisplay(true);
+  digitalWrite(AppConfig::TFT_BACKLIGHT_PIN, HIGH);
   tft_.fillScreen(TFT_BLACK);
   tft_.setTextWrap(false);
 
