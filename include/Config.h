@@ -13,6 +13,11 @@ namespace AppConfig {
 
   // ES3C28P / ESP32-S3, ILI9341V 240x320, landscape 320x240
   constexpr uint8_t TFT_ROTATION = 1;
+  constexpr uint8_t TFT_CS = 10;
+  constexpr uint8_t TFT_DC = 46;
+  constexpr uint8_t TFT_SCK = 12;
+  constexpr uint8_t TFT_MOSI = 11;
+  constexpr uint8_t TFT_MISO = 13;
   constexpr uint8_t TFT_BACKLIGHT_PIN = 45;
 
   // Shared I2C: FT6336G touch + ES8311 codec
@@ -36,9 +41,9 @@ namespace AppConfig {
   constexpr uint8_t AUDIO_AMP_EN = 1; // active LOW
   constexpr uint8_t AUDIO_MCLK = 4;
   constexpr uint8_t AUDIO_BCLK = 5;
-  constexpr uint8_t AUDIO_DOUT = 6;  // ESP32-S3 -> ES8311 / speaker path
+  constexpr uint8_t AUDIO_DOUT = 8;  // ESP32-S3 -> ES8311 / speaker path
   constexpr uint8_t AUDIO_LRCK = 7;
-  constexpr uint8_t AUDIO_DIN  = 8;  // ES8311 -> ESP32-S3 / microphone path
+  constexpr uint8_t AUDIO_DIN  = 6;  // ES8311 -> ESP32-S3 / microphone path
   constexpr uint8_t ES8311_ADDR = 0x18;
   constexpr bool AUDIO_FEATURE_ENABLED = true;
 
