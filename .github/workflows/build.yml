@@ -29,6 +29,7 @@ jobs:
           cat > "$LIBDIR/User_Setup.h" <<'EOF'
           #define USER_SETUP_INFO "ES3C28P"
           #define ILI9341_DRIVER
+          #define TFT_INVERSION_ON
           #define TFT_WIDTH 240
           #define TFT_HEIGHT 320
           #define TFT_MISO 13
@@ -74,14 +75,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v2.1_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v2.2_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v2.1_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v2.2_FULL.bin
           fi
           {
-            echo "Project: Weihnachtsuhr ES3C28P v2.1"
+            echo "Project: Weihnachtsuhr ES3C28P v2.2"
             echo "Board: ES3C28P / ESP32-S3 / ILI9341V / FT6336G / ES8311"
             echo "Arduino-ESP32: 3.3.2"
             echo "Flash: board default (same profile as the known-working test firmware)"
