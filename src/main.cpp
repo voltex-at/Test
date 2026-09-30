@@ -64,20 +64,22 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
-  // Najwazniejsze dla tej rewizji CYD: audio od bootu ma byc fizycznie odlaczone.
-  audioManager.begin();
-
-  settingsManager.begin();
-  settings = settingsManager.load();
-
+  // Start display first so hardware errors in optional peripherals can never
+  // leave the user with a completely black screen.
   displayManager.begin();
   displayManager.showBoot("Start...");
   delay(300);
 
+  settingsManager.begin();
+  settings = settingsManager.load();
+
+  touchManager.begin();
+
   const bool sdOk = displayManager.beginSd();
   Serial.printf("SD: %s\n", sdOk ? "OK" : "FEHLT");
 
-  touchManager.begin();
+  // Audio comes after LCD/touch/SD. Amplifier is muted until playback.
+  audioManager.begin();
 
   if (settingsManager.hasWifi()) {
     displayManager.showWifiStatus("WLAN", "Verbinde...", settings.ssid);
