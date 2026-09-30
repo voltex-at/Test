@@ -4,44 +4,49 @@
 namespace AppConfig {
   constexpr char DEVICE_NAME[] = "Weihnachtsuhr";
   constexpr char AP_SSID[] = "Weihnachtsuhr-Setup";
-  constexpr char AP_PASSWORD[] = ""; // otwarta siec konfiguracyjna
+  constexpr char AP_PASSWORD[] = "";
 
-  // Europa Centralna: CET/CEST z automatyczna zmiana czasu.
   constexpr char TZ_INFO[] = "CET-1CEST,M3.5.0,M10.5.0/3";
   constexpr char NTP_1[] = "pool.ntp.org";
   constexpr char NTP_2[] = "time.cloudflare.com";
   constexpr char NTP_3[] = "time.google.com";
 
-  constexpr uint8_t TFT_ROTATION = 1; // 320x240 landscape
-  constexpr uint8_t TFT_BACKLIGHT_PIN = 21;
+  // ES3C28P / ESP32-S3, ILI9341V 240x320, landscape 320x240
+  constexpr uint8_t TFT_ROTATION = 1;
+  constexpr uint8_t TFT_CS = 10;
+  constexpr uint8_t TFT_DC = 46;
+  constexpr uint8_t TFT_SCK = 12;
+  constexpr uint8_t TFT_MOSI = 11;
+  constexpr uint8_t TFT_MISO = 13;
+  constexpr uint8_t TFT_BACKLIGHT_PIN = 45;
 
-  // microSD - osobny sprzetowy SPI (VSPI)
-  constexpr uint8_t SD_CS   = 5;
-  constexpr uint8_t SD_SCK  = 18;
-  constexpr uint8_t SD_MISO = 19;
-  constexpr uint8_t SD_MOSI = 23;
+  // Shared I2C: FT6336G touch + ES8311 codec
+  constexpr uint8_t I2C_SDA = 16;
+  constexpr uint8_t I2C_SCL = 15;
 
-  // XPT2046 - na CYD ma osobne piny. Uzywamy bit-bang SPI,
-  // aby nie konfliktowac jednoczesnie z TFT i karta SD.
-  constexpr uint8_t TOUCH_CLK  = 25;
-  constexpr uint8_t TOUCH_MOSI = 32;
-  constexpr uint8_t TOUCH_MISO = 39;
-  constexpr uint8_t TOUCH_CS   = 33;
-  constexpr uint8_t TOUCH_IRQ  = 36;
+  // FT6336G capacitive touch
+  constexpr uint8_t TOUCH_RST = 18;
+  constexpr uint8_t TOUCH_IRQ = 17;
+  constexpr uint8_t TOUCH_ADDR = 0x38;
 
-  constexpr int TOUCH_X_MIN = 180;
-  constexpr int TOUCH_X_MAX = 3800;
-  constexpr int TOUCH_Y_MIN = 240;
-  constexpr int TOUCH_Y_MAX = 3860;
+  // microSD in native 4-bit SD_MMC mode
+  constexpr uint8_t SD_CLK = 38;
+  constexpr uint8_t SD_CMD = 40;
+  constexpr uint8_t SD_D0  = 39;
+  constexpr uint8_t SD_D1  = 41;
+  constexpr uint8_t SD_D2  = 48;
+  constexpr uint8_t SD_D3  = 47;
 
-  // Audio dopasowane do tej rewizji CYD:
-  // DAC2/GPIO26 -> wbudowany wzmacniacz. Testy pokazaly, ze ok. +/-8
-  // wokol 128 daje najlepszy kompromis glosnosc/znieksztalcenia.
-  constexpr uint8_t AUDIO_DAC_PIN = 26;
-  constexpr uint8_t AUDIO_DAC_AMPLITUDE = 8;
+  // ES8311 I2S + FM8002E amplifier
+  constexpr uint8_t AUDIO_AMP_EN = 1; // active LOW
+  constexpr uint8_t AUDIO_MCLK = 4;
+  constexpr uint8_t AUDIO_BCLK = 5;
+  constexpr uint8_t AUDIO_DOUT = 8;  // ESP32-S3 -> ES8311 / speaker path
+  constexpr uint8_t AUDIO_LRCK = 7;
+  constexpr uint8_t AUDIO_DIN  = 6;  // ES8311 -> ESP32-S3 / microphone path
+  constexpr uint8_t ES8311_ADDR = 0x18;
   constexpr bool AUDIO_FEATURE_ENABLED = true;
 
-  // Pole dotykowe przycisku Play w prawym gornym rogu.
   constexpr int16_t PLAY_X1 = 264;
   constexpr int16_t PLAY_Y1 = 0;
   constexpr int16_t PLAY_X2 = 319;

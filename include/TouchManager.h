@@ -15,6 +15,5 @@ public:
   TouchPoint read();
 
 private:
-  uint16_t read12(uint8_t command);
-  uint8_t transfer8(uint8_t value);
+  bool readBytes(uint8_t reg, uint8_t* data, size_t len);
 };

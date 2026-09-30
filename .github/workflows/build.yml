@@ -1,10 +1,8 @@
-name: Build Weihnachtsuhr ES3C28P BIN
+name: Build Weihnachtsuhr ES3C28P v3 RAW FSPI
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,27 +14,28 @@ jobs:
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Install ESP32 core 3.3.2
+      - name: Install ESP32 core and libraries
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib update-index
+          arduino-cli lib install "TJpg_Decoder"
+          arduino-cli lib install "Adafruit GFX Library"
 
-      - name: Restore firmware source
+      - name: Prepare Arduino sketch
         run: |
-          mkdir -p firmware_es3c28p/firmware_es3c28p
-          base64 -d firmware_es3c28p/main.cpp.gz.b64 | gzip -d > firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
-          wc -l firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
+          mkdir -p sketch/Weihnachtsuhr_ES3C28P
+          cp include/*.h sketch/Weihnachtsuhr_ES3C28P/
+          cp src/*.cpp sketch/Weihnachtsuhr_ES3C28P/
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_ES3C28P/Weihnachtsuhr_ES3C28P.ino
 
-      - name: Compile ESP32-S3 firmware
+      - name: Compile
         run: |
           mkdir -p build
-          arduino-cli compile \
-            --fqbn esp32:esp32:esp32s3 \
-            --output-dir build \
-            firmware_es3c28p/firmware_es3c28p
+          arduino-cli compile --fqbn esp32:esp32:esp32s3 --output-dir build sketch/Weihnachtsuhr_ES3C28P
           ls -lah build
 
-      - name: Prepare BIN files
+      - name: Prepare BIN package
         shell: bash
         run: |
           set -euxo pipefail
@@ -45,27 +44,27 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v1.0_firmware.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v3.0_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v1.0_full_flash.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v3.0_FULL.bin
           fi
           {
-            echo "Project: Weihnachtsuhr ES3C28P v1.0"
-            echo "Board: ESP32-S3 / ES3C28P"
+            echo "Project: Weihnachtsuhr ES3C28P v3.0"
+            echo "Display: RAW FSPI driver, exact known-working ILI9341V init"
+            echo "Board: ES3C28P / ESP32-S3 / ILI9341V / FT6336G / ES8311"
             echo "Arduino-ESP32: 3.3.2"
-            echo "FQBN: esp32:esp32:esp32s3"
             echo "Git commit: $GITHUB_SHA"
             echo
             sha256sum dist/*.bin
           } > dist/build-info.txt
           ls -lh dist
 
-      - name: Upload compiled binaries
+      - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-BIN
+          name: Weihnachtsuhr-ES3C28P-v3-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30

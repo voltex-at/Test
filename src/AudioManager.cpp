@@ -1,5 +1,7 @@
 #include "AudioManager.h"
 #include "Config.h"
+#include <Wire.h>
+#include <ESP_I2S.h>
 #include <math.h>
 
 namespace {
@@ -9,10 +11,10 @@ struct Note {
   uint16_t gap;
 };
 
-constexpr uint32_t SAMPLE_RATE = 16000;
-constexpr uint8_t DAC_CENTER = 128;
+constexpr uint32_t SAMPLE_RATE = 44100;
+I2SClass audioI2S;
+bool codecReady = false;
 
-// Public-domain/traditional-inspired short phrases, kept intentionally simple.
 constexpr Note CHRISTMAS[] = {
   {330,180,55},{330,180,55},{330,360,90},
   {330,180,55},{330,180,55},{330,360,90},
@@ -45,6 +47,18 @@ constexpr Note VACATION[] = {
   {392,520,120}
 };
 
+void codecWrite(uint8_t reg, uint8_t value) {
+  Wire.beginTransmission(AppConfig::ES8311_ADDR);
+  Wire.write(reg);
+  Wire.write(value);
+  Wire.endTransmission();
+}
+
+bool codecPresent() {
+  Wire.beginTransmission(AppConfig::ES8311_ADDR);
+  return Wire.endTransmission() == 0;
+}
+
 template <size_t N>
 void playSequence(AudioManager& audio, const Note (&notes)[N]) {
   for (const auto& n : notes) {
@@ -56,76 +70,123 @@ void playSequence(AudioManager& audio, const Note (&notes)[N]) {
 }
 
 void AudioManager::begin() {
-  for (int i = 0; i < 256; ++i) {
-    const float a = (2.0f * PI * i) / 256.0f;
-    sineLut_[i] = static_cast<int8_t>(lroundf(127.0f * sinf(a)));
+  pinMode(AppConfig::AUDIO_AMP_EN, OUTPUT);
+  digitalWrite(AppConfig::AUDIO_AMP_EN, HIGH); // active-low amplifier: silence
+
+  Wire.begin(AppConfig::I2C_SDA, AppConfig::I2C_SCL);
+  Wire.setClock(400000);
+  delay(20);
+
+  if (!codecPresent()) {
+    Serial.println("ES8311: not found");
+    codecReady = false;
+    playing_ = false;
+    return;
   }
-  stop();
+
+  // ES8311: I2S slave, 16-bit. Sequence verified for ES3C28P board family.
+  codecWrite(0x00, 0x1F); delay(20);
+  codecWrite(0x00, 0x00);
+  codecWrite(0x00, 0x80);
+  codecWrite(0x01, 0x3F);
+  codecWrite(0x02, 0x00);
+  codecWrite(0x03, 0x10);
+  codecWrite(0x04, 0x10);
+  codecWrite(0x05, 0x00);
+  codecWrite(0x06, 0x03);
+  codecWrite(0x07, 0x00);
+  codecWrite(0x08, 0xFF);
+  codecWrite(0x09, 0x0C);
+  codecWrite(0x0A, 0x0C);
+  codecWrite(0x0D, 0x01);
+  codecWrite(0x0E, 0x02);
+  codecWrite(0x12, 0x00);
+  codecWrite(0x13, 0x10);
+  codecWrite(0x1C, 0x6A);
+  codecWrite(0x37, 0x08);
+  codecWrite(0x32, 0xC8);
+
+  audioI2S.setPins(AppConfig::AUDIO_BCLK, AppConfig::AUDIO_LRCK,
+                   AppConfig::AUDIO_DOUT, AppConfig::AUDIO_DIN,
+                   AppConfig::AUDIO_MCLK);
+  codecReady = audioI2S.begin(I2S_MODE_STD, SAMPLE_RATE,
+                              I2S_DATA_BIT_WIDTH_16BIT,
+                              I2S_SLOT_MODE_STEREO);
+  Serial.printf("ES8311/I2S: %s\n", codecReady ? "OK" : "FAIL");
+  playing_ = false;
 }
 
 void AudioManager::enableDac() {
-  dacWrite(AppConfig::AUDIO_DAC_PIN, DAC_CENTER);
-  delay(35);
+  if (!codecReady) return;
+  digitalWrite(AppConfig::AUDIO_AMP_EN, LOW);
+  delay(8);
 }
 
 void AudioManager::stop() {
-  dacWrite(AppConfig::AUDIO_DAC_PIN, DAC_CENTER);
-  delay(25);
-  dacDisable(AppConfig::AUDIO_DAC_PIN);
-  pinMode(AppConfig::AUDIO_DAC_PIN, INPUT);
+  if (codecReady) {
+    playRest(20);
+    delay(5);
+    digitalWrite(AppConfig::AUDIO_AMP_EN, HIGH);
+  } else {
+    digitalWrite(AppConfig::AUDIO_AMP_EN, HIGH);
+  }
   playing_ = false;
 }
 
 void AudioManager::playRest(uint16_t durationMs) {
-  dacWrite(AppConfig::AUDIO_DAC_PIN, DAC_CENTER);
-  delay(durationMs);
+  if (!codecReady || durationMs == 0) {
+    if (durationMs) delay(durationMs);
+    return;
+  }
+
+  static int16_t silence[256 * 2] = {};
+  uint32_t total = (SAMPLE_RATE * static_cast<uint32_t>(durationMs)) / 1000UL;
+  uint32_t done = 0;
+  while (done < total) {
+    const uint32_t frames = min<uint32_t>(256, total - done);
+    audioI2S.write(reinterpret_cast<uint8_t*>(silence), frames * 2 * sizeof(int16_t));
+    done += frames;
+    delay(0);
+  }
 }
 
 void AudioManager::playTone(uint16_t frequency, uint16_t durationMs) {
-  if (frequency == 0 || durationMs == 0) {
+  if (!codecReady || frequency == 0 || durationMs == 0) {
     playRest(durationMs);
     return;
   }
 
-  const uint32_t totalSamples = (SAMPLE_RATE * static_cast<uint32_t>(durationMs)) / 1000UL;
-  const uint32_t phaseStep = static_cast<uint32_t>(
-    (static_cast<uint64_t>(frequency) << 32) / SAMPLE_RATE
-  );
+  static int16_t frames[256 * 2];
+  uint32_t total = (SAMPLE_RATE * static_cast<uint32_t>(durationMs)) / 1000UL;
+  uint32_t done = 0;
+  float phase = 0.0f;
+  const float step = (2.0f * PI * frequency) / SAMPLE_RATE;
+  constexpr int16_t amplitude = 5400;
 
-  const uint32_t rampLimit = SAMPLE_RATE * 12UL / 1000UL;
-  const uint32_t quarter = totalSamples / 4;
-  const uint32_t attackSamples = quarter < rampLimit ? quarter : rampLimit;
-  const uint32_t releaseSamples = attackSamples;
-
-  uint32_t phase = 0;
-  uint32_t nextUs = micros();
-
-  for (uint32_t i = 0; i < totalSamples; ++i) {
-    phase += phaseStep;
-
-    uint16_t envelope = 256;
-    if (attackSamples && i < attackSamples) {
-      envelope = static_cast<uint16_t>((i * 256UL) / attackSamples);
-    } else if (releaseSamples && i >= totalSamples - releaseSamples) {
-      envelope = static_cast<uint16_t>(((totalSamples - 1 - i) * 256UL) / releaseSamples);
+  while (done < total) {
+    const uint32_t count = min<uint32_t>(256, total - done);
+    for (uint32_t i = 0; i < count; ++i) {
+      int16_t sample = static_cast<int16_t>(sinf(phase) * amplitude);
+      // Short attack/release to avoid clicks.
+      const uint32_t absoluteFrame = done + i;
+      const uint32_t ramp = SAMPLE_RATE / 100; // 10 ms
+      if (absoluteFrame < ramp) sample = static_cast<int16_t>((sample * absoluteFrame) / ramp);
+      if (total > ramp && absoluteFrame > total - ramp) {
+        sample = static_cast<int16_t>((sample * (total - absoluteFrame)) / ramp);
+      }
+      frames[i * 2] = sample;
+      frames[i * 2 + 1] = sample;
+      phase += step;
+      if (phase >= 2.0f * PI) phase -= 2.0f * PI;
     }
-
-    const int amplitude = (AppConfig::AUDIO_DAC_AMPLITUDE * envelope) >> 8;
-    const int wave = sineLut_[phase >> 24];
-    const int sample = DAC_CENTER + ((wave * amplitude) / 127);
-
-    dacWrite(AppConfig::AUDIO_DAC_PIN, constrain(sample, 0, 255));
-
-    nextUs += 1000000UL / SAMPLE_RATE;
-    while (static_cast<int32_t>(micros() - nextUs) < 0) {}
+    audioI2S.write(reinterpret_cast<uint8_t*>(frames), count * 2 * sizeof(int16_t));
+    done += count;
+    delay(0);
   }
-
-  dacWrite(AppConfig::AUDIO_DAC_PIN, DAC_CENTER);
 }
 
 void AudioManager::play(MelodyType melody) {
-  if (playing_) return;
-
+  if (playing_ || !codecReady) return;
   playing_ = true;
   enableDac();
 
@@ -144,23 +205,11 @@ void AudioManager::play(MelodyType melody) {
 
 void AudioManager::playForScene(SceneType scene) {
   switch (scene) {
-    case SceneType::BIRTHDAY:
-      play(MelodyType::BIRTHDAY);
-      break;
-    case SceneType::SILVESTER:
-      play(MelodyType::NEW_YEAR);
-      break;
-    case SceneType::HALLOWEEN:
-      play(MelodyType::HALLOWEEN);
-      break;
-    case SceneType::EASTER:
-      play(MelodyType::EASTER);
-      break;
-    case SceneType::VACATION:
-      play(MelodyType::VACATION);
-      break;
-    default:
-      play(MelodyType::CHRISTMAS);
-      break;
+    case SceneType::BIRTHDAY:  play(MelodyType::BIRTHDAY); break;
+    case SceneType::SILVESTER: play(MelodyType::NEW_YEAR); break;
+    case SceneType::HALLOWEEN: play(MelodyType::HALLOWEEN); break;
+    case SceneType::EASTER:    play(MelodyType::EASTER); break;
+    case SceneType::VACATION:  play(MelodyType::VACATION); break;
+    default:                   play(MelodyType::CHRISTMAS); break;
   }
 }
