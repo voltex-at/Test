@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr ES3C28P v2
+name: Build Weihnachtsuhr ES3C28P v3 RAW FSPI
 
 on:
   pull_request:
@@ -20,7 +20,7 @@ jobs:
           arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli lib update-index
           arduino-cli lib install "TFT_eSPI@2.5.43"
-          arduino-cli lib install "TJpg_Decoder@1.1.0"
+          arduino-cli lib install "TJpg_Decoder@1.1.0"\n          arduino-cli lib install "Adafruit GFX Library@1.12.1"
 
       - name: Configure TFT_eSPI for ES3C28P
         shell: bash
@@ -75,14 +75,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v2.2_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v3.0_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v2.2_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v3.0_FULL.bin
           fi
           {
-            echo "Project: Weihnachtsuhr ES3C28P v2.2"
+            echo "Project: Weihnachtsuhr ES3C28P v3.0"
             echo "Board: ES3C28P / ESP32-S3 / ILI9341V / FT6336G / ES8311"
             echo "Arduino-ESP32: 3.3.2"
             echo "Flash: board default (same profile as the known-working test firmware)"
@@ -96,7 +96,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v2-BIN
+          name: Weihnachtsuhr-ES3C28P-v3-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
