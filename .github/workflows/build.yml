@@ -24,8 +24,8 @@ jobs:
       - name: Restore firmware source
         run: |
           mkdir -p firmware_es3c28p/firmware_es3c28p
-          base64 -d firmware_es3c28p/main.cpp.gz.b64 | gzip -d > firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
-          wc -l firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
+          base64 -d firmware_es3c28p/main.cpp.gz.b64 | gzip -d > firmware_es3c28p/firmware_es3c28p/main.cpp\n          printf '// Arduino sketch anchor\\n' > firmware_es3c28p/firmware_es3c28p/firmware_es3c28p.ino
+          wc -l firmware_es3c28p/firmware_es3c28p/main.cpp
 
       - name: Compile ESP32-S3 firmware
         run: |
