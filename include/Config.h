@@ -36,9 +36,9 @@ namespace AppConfig {
   constexpr uint8_t AUDIO_AMP_EN = 1; // active LOW
   constexpr uint8_t AUDIO_MCLK = 4;
   constexpr uint8_t AUDIO_BCLK = 5;
-  constexpr uint8_t AUDIO_DOUT = 8;  // ESP32-S3 -> ES8311
+  constexpr uint8_t AUDIO_DOUT = 6;  // ESP32-S3 -> ES8311 / speaker path
   constexpr uint8_t AUDIO_LRCK = 7;
-  constexpr uint8_t AUDIO_DIN  = 6;  // ES8311 -> ESP32-S3
+  constexpr uint8_t AUDIO_DIN  = 8;  // ES8311 -> ESP32-S3 / microphone path
   constexpr uint8_t ES8311_ADDR = 0x18;
   constexpr bool AUDIO_FEATURE_ENABLED = true;
 
