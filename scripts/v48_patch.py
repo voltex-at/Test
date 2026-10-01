@@ -124,9 +124,9 @@ s = s.replace(
 )
 
 album_api = r'''String albumListJson(){
-  if(!sdReady)return "{"error":"audio_no_card"}";
+  if(!sdReady)return "{\"error\":\"audio_no_card\"}";
   if(!SD_MMC.exists(albumDir()))SD_MMC.mkdir(albumDir());
-  String out="{"photos":[";
+  String out="{\"photos\":[";
   File dir=SD_MMC.open(albumDir());bool first=true;
   if(dir&&dir.isDirectory())for(File f=dir.openNextFile();f;f=dir.openNextFile()){
     if(f.isDirectory())continue;
@@ -134,7 +134,7 @@ album_api = r'''String albumListJson(){
     if(!(l.endsWith(".jpg")||l.endsWith(".jpeg")))continue;
     if(!first)out+=",";
     first=false;
-    out+="{"name":"+json(music::baseName(n))+","size":"+String((unsigned long)f.size())+"}";
+    out+="{\"name\":"+json(music::baseName(n))+",\"size\":"+String((unsigned long)f.size())+"}";
   }
   out+="]}";
   return out;
