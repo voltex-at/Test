@@ -76,7 +76,7 @@ if start!=-1 and end!=-1:
 
 s = s.replace('  button(tr("Zurueck","Wroc","Back"),12,136);button(tr("Kalibrieren","Kalibracja","Calibrate"),162,146);',
               '  button(tr("Zurueck","Wroc","Back"),86,146);')
-s = re.sub(r'\n\s*server\.on\("/api/calibrate".*?\);', '', s)
+s = s.replace('  server.on("/api/calibrate",HTTP_POST,[](){if(authorize(true)){startCalibration();ok();}});\n','')
 s = s.replace('bootConsumed=true;calibrating=false;openAP();','bootConsumed=true;openAP();')
 s = re.sub(r'\n\s*if\(p\.getBytesLength\("touch"\)==sizeof\(calibration\)\)p\.getBytes\("touch",&calibration,sizeof\(calibration\)\);','',s)
 s = s.replace('  calibration={0x54434831,1,0,0,0,1,0};calibrationReady=true;\n','')
@@ -91,12 +91,6 @@ s = s.replace('Weihnachtsuhr v5.0 LVGL / ES3C28P',
 for bad in ('XPT2046','TOUCH_X_MIN','TOUCH_X_MAX','TOUCH_Y_MIN','TOUCH_Y_MAX'):
     if bad in s:
         raise SystemExit('legacy touch token remains: '+bad)
-
-# Repair API block after removing the legacy calibration endpoint.
-s = s.replace('server.on("/api/sd",HTTP_POST,[](){if(authorize(true)){if(mountSD())ok();else apiError(409,"audio_busy");}});ok();}});',
-              'server.on("/api/sd",HTTP_POST,[](){if(authorize(true)){if(mountSD())ok();else apiError(409,"audio_busy");}});')
-# Remove any orphaned tail left by the deleted calibration lambda.
-s = s.replace(');ok();}});\n  server.onNotFound', ');\n  server.onNotFound')
 
 main.write_text(s)
 
