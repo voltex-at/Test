@@ -63,24 +63,23 @@ inline bool raw(Point& p){
 
 s = main.read_text()
 
-# Strip all legacy calibration state.
-s = re.sub(r'bool reconnect=false,calibrating=false,touchHeld=false,calibrationReady=false,bootConsumed=false;',
-           'bool reconnect=false,touchHeld=false,bootConsumed=false;', s)
-s = re.sub(r'int calibrationStep=0;\s*touch::Point calibrationRaw\[3\];\s*const touch::Point targets\[3\]=\{\{22,22\},\{298,22\},\{22,218\}\};\s*touch::Calibration calibration\{\};',
+# Strip all legacy calibration state and UI from the old backend.
+s = s.replace('bool reconnect=false,calibrating=false,touchHeld=false,calibrationReady=false,bootConsumed=false;',
+              'bool reconnect=false,touchHeld=false,bootConsumed=false;')
+s = re.sub(r'\nint calibrationStep=0;\ntouch::Point calibrationRaw\[3\];\nconst touch::Point targets\[3\]=\{\{22,22\},\{298,22\},\{22,218\}\};\ntouch::Calibration calibration\{\};',
            '', s)
 
-# Remove legacy calibration UI/functions completely if still present.
-s = re.sub(r'void drawCalibration\(\) \{.*?\n\}\s*void startCalibration\(\)\{.*?\n\}', '', s, flags=re.S)
-s = re.sub(r'void drawCalibration\(\)\{.*?\n\}\s*void startCalibration\(\)\{.*?\n\}', '', s, flags=re.S)
+start=s.find('void drawCalibration()')
+end=s.find('void drawClock()', start)
+if start!=-1 and end!=-1:
+    s=s[:start]+s[end:]
 
-# Remove any old NVS load of touch calibration.
-s = re.sub(r'\s*calibrationReady\s*=\s*[^;]+;','',s)
-s = re.sub(r'\s*p\.getBytes\("touch"[^;]+;','',s)
-s = re.sub(r'\s*Preferences\s+tp;\s*if\(tp\.begin\("peppi",true\)\)\{.*?tp\.end\(\);\s*\}','',s,flags=re.S)
-
-# No touch calibration/test launch from old configuration screen.
-s = s.replace('else startCalibration();','')
-s = s.replace('startCalibration();','')
+s = s.replace('  button(tr("Zurueck","Wroc","Back"),12,136);button(tr("Kalibrieren","Kalibracja","Calibrate"),162,146);',
+              '  button(tr("Zurueck","Wroc","Back"),86,146);')
+s = re.sub(r'\n\s*server\.on\("/api/calibrate".*?\);', '', s)
+s = s.replace('bootConsumed=true;calibrating=false;openAP();','bootConsumed=true;openAP();')
+s = re.sub(r'\n\s*if\(p\.getBytesLength\("touch"\)==sizeof\(calibration\)\)p\.getBytes\("touch",&calibration,sizeof\(calibration\)\);','',s)
+s = s.replace('  calibration={0x54434831,1,0,0,0,1,0};calibrationReady=true;\n','')
 
 # Make black-board identity explicit in serial/build strings.
 s = s.replace('Weihnachtsuhr v5.0.1 LVGL / ES3C28P',
@@ -96,18 +95,22 @@ for bad in ('XPT2046','TOUCH_X_MIN','TOUCH_X_MAX','TOUCH_Y_MIN','TOUCH_Y_MAX'):
 main.write_text(s)
 
 w = web.read_text()
-for phrase in [
-    'Touch-Kalibrierung','Touch Kalibrierung','Kalibrierung',
-    'Kalibracja dotyku','Kalibracja','Touch calibration','Calibration'
-]:
-    w = w.replace(phrase,'Touch')
+# Remove calibration control and strings from the web UI too.
+w = re.sub(r'<button class="btn secondary" id="calibrate".*?</button>','',w)
+w = re.sub(r"\$\('calibrate'\)\.onclick=.*?;\n",'',w)
+w = w.replace('SD-Karte & Touch-Kalibrierung','SD-Karte')
+w = w.replace('Karta SD i kalibracja dotyku','Karta SD')
+w = w.replace('SD card & touch calibration','SD card')
+w = re.sub(r",calibrate:'[^']*'",'',w)
+w = re.sub(r",calibrating:'[^']*'",'',w)
 w = w.replace('v5.0.1 LVGL ES3C28P','v5.1 LVGL BLACK ES3C28P')
 w = w.replace('v5.0 LVGL ES3C28P','v5.1 LVGL BLACK ES3C28P')
 web.write_text(w)
 
 # Final guard: firmware for this branch must contain only FT6336G touch code.
-joined = main.read_text() + touch.read_text()
-if 'Calibration' in joined or 'calibration' in joined:
-    raise SystemExit('calibration code still present')
+joined = main.read_text() + touch.read_text() + web.read_text()
+for bad in ('calibration','Calibration','kalibrac','Kalibrac','kalibrier','Kalibrier'):
+    if bad in joined:
+        raise SystemExit('legacy calibration token still present: '+bad)
 if 'FT6336G' not in joined:
     raise SystemExit('FT6336G driver missing')
