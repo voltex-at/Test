@@ -1,0 +1,112 @@
+name: Build Peppi v5.0 LVGL BLACK ES3C28P exact source
+
+on:
+  push:
+    branches: [v5-clean-user-source]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32-S3 core and libraries
+        run: |
+          set -euxo pipefail
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib update-index
+          arduino-cli lib install "TJpg_Decoder"
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "lvgl@9.3.0"
+          mkdir -p "$HOME/Arduino/libraries"
+          git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
+
+      - name: Restore exact v5 source from user v4.6 base
+        run: |
+          set -euxo pipefail
+          SKETCH="sketch/Peppi_v5_LVGL_BLACK_ES3C28P"
+          mkdir -p /tmp/base "$SKETCH"
+
+          # Recover the unchanged large hardware/assets files from the repository payload.
+          cat payload/part_* > /tmp/base.b64
+          base64 -d /tmp/base.b64 | tar -xz -C /tmp/base
+          cp /tmp/base/include/* "$SKETCH"/
+          cp /tmp/base/src/*.cpp "$SKETCH"/
+          rm -f "$SKETCH/main.cpp"
+
+          # Overlay the exact source produced from the user's BLACK ES3C28P v4.6 Arduino ZIP.
+          cat v5clean/payload/part_* > /tmp/v5clean.b64
+          base64 -d /tmp/v5clean.b64 > /tmp/v5clean.tgz
+          tar -xzf /tmp/v5clean.tgz -C "$SKETCH"
+
+          cat > "$SKETCH/partitions.csv" <<'EOF'
+          # Name,   Type, SubType, Offset,   Size,     Flags
+          nvs,      data, nvs,     0x9000,   0x5000,
+          otadata,  data, ota,     0xe000,   0x2000,
+          app0,     app,  ota_0,   0x10000,  0x600000,
+          app1,     app,  ota_1,   0x610000, 0x600000,
+          spiffs,   data, spiffs,  0xC10000, 0x3E0000,
+          EOF
+
+          test -f "$SKETCH/Peppi_v5_LVGL_BLACK_ES3C28P.ino"
+          test -f "$SKETCH/Artwork.h"
+          test -f "$SKETCH/PeppiDisplay.cpp"
+          grep -q '#include <lvgl.h>' "$SKETCH/Peppi_v5_LVGL_BLACK_ES3C28P.ino"
+          grep -q 'FT6336G' "$SKETCH/Touch.h"
+          ! grep -R -n -E 'touch::Calibration|startCalibration|/api/calibrate|lv_draw_sw_rgb565_swap' "$SKETCH"
+          ls -lh "$SKETCH" | head -40
+
+      - name: Compile ESP32-S3 16MB / 8MB PSRAM
+        run: |
+          set -euxo pipefail
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
+            --build-property upload.maximum_size=6291456 \
+            --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
+            --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
+            --output-dir build \
+            sketch/Peppi_v5_LVGL_BLACK_ES3C28P
+          ls -lah build
+
+      - name: Package BIN and exact source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          APP="$(find build -maxdepth 1 -type f -name '*.ino.bin' | head -n1)"
+          BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
+          PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
+          test -n "$APP"; test -n "$BOOT"; test -n "$PART"
+          cp "$APP" dist/Peppi_v5.0_LVGL_BLACK_ES3C28P_FIRMWARE.bin
+          cp "$BOOT" dist/bootloader.bin
+          cp "$PART" dist/partitions.bin
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
+            cp "$MERGED" dist/Peppi_v5.0_LVGL_BLACK_ES3C28P_FULL.bin
+          fi
+          zip -qr dist/Peppi_v5.0_LVGL_BLACK_ES3C28P_SOURCE.zip sketch/Peppi_v5_LVGL_BLACK_ES3C28P
+          {
+            echo "Peppi v5.0 LVGL - BLACK ES3C28P"
+            echo "Source base: user-supplied Weihnachtsuhr_ES3C28P_v4.6_ArduinoIDE"
+            echo "ESP32-S3 / ILI9341V / FT6336G absolute touch / NO CALIBRATION"
+            echo "ES8311 / SD_MMC / LVGL 9.3.0"
+            echo "Git commit: $GITHUB_SHA"
+            echo
+            sha256sum dist/*.bin
+          } > dist/build-info.txt
+          ls -lh dist
+
+      - name: Upload exact-source binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: Peppi-v5.0-LVGL-BLACK-ES3C28P-EXACT-SOURCE-BIN
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
