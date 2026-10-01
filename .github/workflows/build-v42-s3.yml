@@ -69,6 +69,7 @@ jobs:
             s=s.replace(old,new)
           p.write_text(s)
           PY
+          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp
           echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v45_ES3C28P/Weihnachtsuhr_v45_ES3C28P.ino
           cat > sketch/Weihnachtsuhr_v45_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
