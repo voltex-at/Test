@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v4.5 ES3C28P
+name: Build Weihnachtsuhr v4.6 ES3C28P
 
 on:
   push:
@@ -26,22 +26,22 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v4.5 source and embedded artwork
+      - name: Restore v4.6 source and embedded artwork
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/v45src sketch/Weihnachtsuhr_v45_ES3C28P
-          cat payload/part_* > /tmp/v45.b64
-          base64 -d /tmp/v45.b64 | tar -xz -C /tmp/v45src
-          cp /tmp/v45src/include/* sketch/Weihnachtsuhr_v45_ES3C28P/
-          cp /tmp/v45src/src/*.cpp sketch/Weihnachtsuhr_v45_ES3C28P/
+          mkdir -p /tmp/v46src sketch/Weihnachtsuhr_v46_ES3C28P
+          cat payload/part_* > /tmp/v46.b64
+          base64 -d /tmp/v46.b64 | tar -xz -C /tmp/v46src
+          cp /tmp/v46src/include/* sketch/Weihnachtsuhr_v46_ES3C28P/
+          cp /tmp/v46src/src/*.cpp sketch/Weihnachtsuhr_v46_ES3C28P/
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/Touch.h")
+          p=Path("sketch/Weihnachtsuhr_v46_ES3C28P/Touch.h")
           s=p.read_text()
           s=s.replace('pinMode(RST,OUTPUT);pinMode(IRQ,INPUT_PULLUP);digitalWrite(RST,LOW);delay(10);digitalWrite(RST,HIGH);delay(250);\n  Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);',
                       'Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);\n  pinMode(RST,OUTPUT);pinMode(IRQ,INPUT);digitalWrite(RST,LOW);delay(12);digitalWrite(RST,HIGH);delay(320);')
           p.write_text(s)
-          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v46_ES3C28P/main.cpp")
           s=p.read_text()
           old='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  if(digitalRead(touch::IRQ)){touchHeld=false;return;}if(touchHeld)return;\n  touch::Point p;if(!touch::raw(p))return;touchHeld=true;'''
           new='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  // FT6336G is polled over I2C. Do not gate reads on INT: some ES3C28P\n  // revisions keep INT high unless the controller is explicitly configured.\n  touch::Point p;\n  if(!touch::raw(p)){touchHeld=false;return;}\n  if(touchHeld)return;\n  touchHeld=true;'''
@@ -56,7 +56,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import base64
-          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v46_ES3C28P/main.cpp")
           s=p.read_text()
           pairs=[
             ("dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oQkcpO2NlbnRlcih0cigiS2FsaWJyaWVydW5nIiwiS2FsaWJyYWNqYSIsIkNhbGlicmF0aW9uIiksMTYwLDc0LDQsR09MRCk7Y2VudGVyKHRyKCJLcmV1eiBhbnRpcHBlbiB1bmQgbG9zbGFzc2VuIiwiRG90a25paiBpIHB1c2Mga3J6eXp5ayIsIlRhcCBhbmQgcmVsZWFzZSB0aGUgY3Jvc3MiKSwxNjAsMTEwLDIpO2NlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsMTQwLDIpOwogIGF1dG8gcD10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07bGNkLmRyYXdDaXJjbGUocC54LHAueSwxMCxXSElURSk7bGNkLmRyYXdGYXN0SExpbmUocC54LTE1LHAueSwzMSxHT0xEKTtsY2QuZHJhd0Zhc3RWTGluZShwLngscC55LTE1LDMxLEdPTEQpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPXRydWU7ZHJhd0NhbGlicmF0aW9uKCk7fQ==","dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oMHgwODQyKTsKICBjZW50ZXIodHIoIlRvdWNoLVRlc3QiLCJUZXN0IGRvdHlrdSIsIlRvdWNoIHRlc3QiKSwxNjAsMzgsNCxHT0xEKTsKICBjZW50ZXIodHIoIlB1bmt0IGFudGlwcGVuIiwiRG90a25paiBwdW5rdHUiLCJUYXAgdGhlIHBvaW50IiksMTYwLDY4LDIsV0hJVEUpOwogIGNlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsOTEsMiwweEJERjcpOwogIGF1dG8gcT10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07CiAgbGNkLmRyYXdDaXJjbGUocS54LHEueSwxMyxHT0xEKTtsY2QuZHJhd0NpcmNsZShxLngscS55LDUsV0hJVEUpOwogIGxjZC5kcmF3RmFzdEhMaW5lKHEueC0yMCxxLnksNDEsR09MRCk7bGNkLmRyYXdGYXN0VkxpbmUocS54LHEueS0yMCw0MSxHT0xEKTsKICBjZW50ZXIodHIoIkZUNjMzNkcgLSBrZWluZSBLYWxpYnJpZXJ1bmcgbm9ldGlnIiwiRlQ2MzM2RyAtIGthbGlicmFjamEgbmllcG90cnplYm5hIiwiRlQ2MzM2RyAtIG5vIGNhbGlicmF0aW9uIG5lZWRlZCIpLDE2MCwyMTgsMSwweEJERjcpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPWZhbHNlO2RyYXdDYWxpYnJhdGlvbigpO30=","touch-test-ui"),
@@ -69,9 +69,115 @@ jobs:
             s=s.replace(old,new)
           p.write_text(s)
           PY
-          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v45_ES3C28P/Weihnachtsuhr_v45_ES3C28P.ino
-          cat > sketch/Weihnachtsuhr_v45_ES3C28P/partitions.csv <<'EOF'
+          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v46_ES3C28P/main.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path("sketch/Weihnachtsuhr_v46_ES3C28P/main.cpp")
+          s=p.read_text()
+
+          # No user-facing calibration button on FT6336G.
+          s=s.replace('button(tr("Zurueck","Wroc","Back"),12,136);button(tr("Kalibrieren","Kalibracja","Calibrate"),162,146);',
+                      'button(tr("Zurueck","Wroc","Back"),82,156);')
+
+          player = r'''void drawPlayerDynamic(){
+  const uint16_t PANEL=0x10A3,PANEL2=0x3186;
+  String title=music::title();
+  if(!title.length())title=tr("Keine Musik gewaehlt","Nie wybrano muzyki","No track selected");
+  int dot=title.lastIndexOf('.');if(dot>0)title=title.substring(0,dot);
+  if(title.length()>38)title=title.substring(0,35)+"...";
+
+  // Only this compact area is redrawn after play/next/volume changes.
+  lcd.fillRoundRect(24,88,272,58,16,PANEL);
+  screen::text(lcd,tr("JETZT","TERAZ","NOW PLAYING"),160,103,&FreeSans9pt7b,screen::GOLD,250);
+  screen::text(lcd,title,160,130,&FreeSans9pt7b,screen::CREAM,250);
+
+  // Volume slider.
+  lcd.fillRoundRect(38,151,244,30,15,PANEL);
+  screen::text(lcd,"VOL",58,166,&FreeSans9pt7b,screen::CREAM,42);
+  const int x1=88,x2=257,y=166;
+  lcd.fillRoundRect(x1,y-3,x2-x1,6,3,PANEL2);
+  int vx=x1+(int)(music::volume.load()*(x2-x1)/100U);
+  if(vx>x1)lcd.fillRoundRect(x1,y-3,vx-x1,6,3,screen::GOLD);
+  lcd.fillCircle(vx,y,8,screen::CREAM);
+  lcd.drawCircle(vx,y,8,screen::GOLD);
+
+  // Transport controls.
+  lcd.fillCircle(78,212,20,PANEL);lcd.drawCircle(78,212,20,screen::GOLD);
+  lcd.fillTriangle(73,203,73,221,61,212,screen::CREAM);lcd.fillRect(59,203,3,18,screen::CREAM);
+  lcd.fillCircle(160,210,27,PANEL);lcd.drawCircle(160,210,27,screen::GOLD);lcd.drawCircle(160,210,26,screen::GOLD);
+  if(music::state==music::Playing){
+    lcd.fillRoundRect(150,198,6,24,2,screen::CREAM);lcd.fillRoundRect(164,198,6,24,2,screen::CREAM);
+  }else lcd.fillTriangle(154,197,154,223,175,210,screen::CREAM);
+  lcd.fillCircle(242,212,20,PANEL);lcd.drawCircle(242,212,20,screen::GOLD);
+  lcd.fillTriangle(247,203,247,221,259,212,screen::CREAM);lcd.fillRect(259,203,3,18,screen::CREAM);
+}
+
+void drawPlayer(){
+  music::setCategory(musicCategory());
+  drawArtwork(playerArtwork());
+  const uint16_t PANEL=0x10A3;
+  // Only Back remains in the header; category text is redundant with the artwork.
+  lcd.fillCircle(27,27,20,PANEL);lcd.drawCircle(27,27,20,screen::GOLD);
+  lcd.drawFastHLine(18,27,16,screen::CREAM);
+  lcd.drawLine(18,27,25,20,screen::CREAM);lcd.drawLine(18,27,25,34,screen::CREAM);
+  drawPlayerDynamic();
+}'''
+          s, n = re.subn(r'void drawPlayer\(\)\{.*?\n\}\n\nvoid render\(\)\{', player+'\n\nvoid render(){', s, flags=re.S)
+          if n!=1: raise SystemExit(f"drawPlayer replacement count={n}")
+
+          s=s.replace('else if(playerScreen){if(all)drawPlayer();}',
+                      'else if(playerScreen){if(all)drawPlayer();else drawPlayerDynamic();}')
+
+          # Track changes no longer reload the JPEG background.
+          s=s.replace('if(nowTrack!=lastTrack){lastTrack=nowTrack;forceFull=playerScreen;dirty=true;}',
+                      'if(nowTrack!=lastTrack){lastTrack=nowTrack;dirty=true;}')
+
+          poll = r'''void pollTouch() {
+  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;
+  static bool volumeDrag=false;
+  touch::Point p;
+  if(!touch::raw(p)){
+    if(volumeDrag){
+      Preferences prefs;if(prefs.begin("peppi",false)){prefs.putUChar("volume",(uint8_t)music::volume.load());prefs.end();}
+      volumeDrag=false;
+    }
+    touchHeld=false;return;
+  }
+  p=touch::map(p,calibration);
+  if(p.x<0||p.x>=320||p.y<0||p.y>=240)return;
+
+  if(playerScreen && p.y>=146 && p.y<=184 && p.x>=76 && p.x<=275){
+    int level=constrain((p.x-88)*100/(257-88),0,100);
+    music::setVolume((unsigned)level);
+    volumeDrag=true;dirty=true;forceFull=false;
+    return;
+  }
+
+  if(touchHeld)return;
+  touchHeld=true;
+
+  if(playerScreen){
+    if(p.x<58&&p.y<60){playerScreen=false;forceFull=true;dirty=true;return;}
+    if(p.y>=185){
+      music::setCategory(musicCategory());
+      if(p.x<115)music::previous(sdReady);
+      else if(p.x>205)music::next(sdReady);
+      else toggleMusic();
+      forceFull=false;dirty=true;return;
+    }
+  }
+  else if(configScreen&&p.y>=205){configScreen=false;forceFull=true;dirty=true;}
+  else if(!configScreen&&p.y>=190&&p.x<=54)openAP();
+  else if(!configScreen&&p.y>=190&&p.x>=266){playerScreen=true;forceFull=true;dirty=true;}
+}'''
+          s, n = re.subn(r'void pollTouch\(\) \{.*?\n\}\nvoid noCache\(\)', poll+'\nvoid noCache()', s, flags=re.S)
+          if n!=1: raise SystemExit(f"pollTouch replacement count={n}")
+
+          p.write_text(s)
+          PY
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v46_ES3C28P/Weihnachtsuhr_v46_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v46_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
           otadata,  data, ota,     0xe000,   0x2000,
@@ -79,8 +185,8 @@ jobs:
           app1,     app,  ota_1,   0x610000, 0x600000,
           spiffs,   data, spiffs,  0xC10000, 0x3E0000,
           EOF
-          grep -R "grincz" -n sketch/Weihnachtsuhr_v45_ES3C28P | head || true
-          ls -lh sketch/Weihnachtsuhr_v45_ES3C28P | head -40
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v46_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v46_ES3C28P | head -40
 
       - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
@@ -90,7 +196,7 @@ jobs:
             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
             --build-property upload.maximum_size=6291456 \
             --output-dir build \
-            sketch/Weihnachtsuhr_v45_ES3C28P
+            sketch/Weihnachtsuhr_v46_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -102,14 +208,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.5_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.6_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.5_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.6_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v4.5 - ES3C28P"
+            echo "Weihnachtsuhr v4.6 - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
             echo "Factory artwork embedded in firmware, including Grincz"
             echo "User images and music on SD; MP3/WAV/AAC/M4A/FLAC player and web upload"
@@ -122,7 +228,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v4.5-BIN
+          name: Weihnachtsuhr-ES3C28P-v4.6-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
