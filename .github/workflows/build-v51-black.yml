@@ -46,7 +46,7 @@ jobs:
 
           # Transform the known-good black-board base exactly into the LVGL
           # source generated from the user's uploaded v4.6 ArduinoIDE project.
-          cat v5userpatchgz/part_* > /tmp/userpatch.gz.b64
+          cat v5userpatchgz/p00_0 v5userpatchgz/p00_1 v5userpatchgz/p00_2 v5userpatchgz/part_01 v5userpatchgz/part_02 > /tmp/userpatch.gz.b64
           base64 -d /tmp/userpatch.gz.b64 > /tmp/userpatch.gz
           gzip -dc /tmp/userpatch.gz > /tmp/user.patch
           (
