@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v4.4 ES3C28P
+name: Build Weihnachtsuhr v4.5 ES3C28P
 
 on:
   push:
@@ -26,22 +26,22 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v4.4 source and embedded artwork
+      - name: Restore v4.5 source and embedded artwork
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/v44src sketch/Weihnachtsuhr_v44_ES3C28P
-          cat payload/part_* > /tmp/v44.b64
-          base64 -d /tmp/v44.b64 | tar -xz -C /tmp/v44src
-          cp /tmp/v44src/include/* sketch/Weihnachtsuhr_v44_ES3C28P/
-          cp /tmp/v44src/src/*.cpp sketch/Weihnachtsuhr_v44_ES3C28P/
+          mkdir -p /tmp/v45src sketch/Weihnachtsuhr_v45_ES3C28P
+          cat payload/part_* > /tmp/v45.b64
+          base64 -d /tmp/v45.b64 | tar -xz -C /tmp/v45src
+          cp /tmp/v45src/include/* sketch/Weihnachtsuhr_v45_ES3C28P/
+          cp /tmp/v45src/src/*.cpp sketch/Weihnachtsuhr_v45_ES3C28P/
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("sketch/Weihnachtsuhr_v44_ES3C28P/Touch.h")
+          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/Touch.h")
           s=p.read_text()
           s=s.replace('pinMode(RST,OUTPUT);pinMode(IRQ,INPUT_PULLUP);digitalWrite(RST,LOW);delay(10);digitalWrite(RST,HIGH);delay(250);\n  Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);',
                       'Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);\n  pinMode(RST,OUTPUT);pinMode(IRQ,INPUT);digitalWrite(RST,LOW);delay(12);digitalWrite(RST,HIGH);delay(320);')
           p.write_text(s)
-          p=Path("sketch/Weihnachtsuhr_v44_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp")
           s=p.read_text()
           old='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  if(digitalRead(touch::IRQ)){touchHeld=false;return;}if(touchHeld)return;\n  touch::Point p;if(!touch::raw(p))return;touchHeld=true;'''
           new='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  // FT6336G is polled over I2C. Do not gate reads on INT: some ES3C28P\n  // revisions keep INT high unless the controller is explicitly configured.\n  touch::Point p;\n  if(!touch::raw(p)){touchHeld=false;return;}\n  if(touchHeld)return;\n  touchHeld=true;'''
@@ -51,10 +51,103 @@ jobs:
           new_cfg='''  screen::text(lcd,"Wi-Fi",190,76,&FreeSerifBold9pt7b,screen::CREAM,148);\n  screen::text(lcd,apName,190,101,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,tr("Passwort","Haslo","Password"),190,122,&FreeSerif9pt7b,screen::CREAM,148);\n  screen::text(lcd,adminPassword,190,143,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,"192.168.4.1",190,164,&FreeSans9pt7b,screen::CREAM,150);'''
           if old_cfg not in s: raise SystemExit("drawConfig pattern not found")
           s=s.replace(old_cfg,new_cfg)
+          old_cal='''void drawCalibration() {
+  lcd.fillScreen(BG);center(tr("Kalibrierung","Kalibracja","Calibration"),160,74,4,GOLD);center(tr("Kreuz antippen und loslassen","Dotknij i pusc krzyzyk","Tap and release the cross"),160,110,2);center(String(calibrationStep+1)+" / 3",160,140,2);
+  auto p=targets[calibrationStep];lcd.drawCircle(p.x,p.y,10,WHITE);lcd.drawFastHLine(p.x-15,p.y,31,GOLD);lcd.drawFastVLine(p.x,p.y-15,31,GOLD);
+}
+void startCalibration(){forceFull=true;calibrating=true;calibrationStep=0;touchHeld=true;drawCalibration();}'''
+          new_cal='''void drawCalibration() {
+  // FT6336G is capacitive and does not need affine calibration.
+  // This screen is now a 3-point touch verification instead.
+  lcd.fillScreen(0x0842);
+  center(tr("Touch-Test","Test dotyku","Touch test"),160,38,4,GOLD);
+  center(tr("Punkt antippen","Dotknij punktu","Tap the point"),160,68,2,WHITE);
+  center(String(calibrationStep+1)+" / 3",160,91,2,0xBDF7);
+  auto q=targets[calibrationStep];
+  lcd.drawCircle(q.x,q.y,13,GOLD);lcd.drawCircle(q.x,q.y,5,WHITE);
+  lcd.drawFastHLine(q.x-20,q.y,41,GOLD);lcd.drawFastVLine(q.x,q.y-20,41,GOLD);
+  center(tr("FT6336G - keine Kalibrierung noetig","FT6336G - kalibracja niepotrzebna","FT6336G - no calibration needed"),160,218,1,0xBDF7);
+}
+void startCalibration(){forceFull=true;calibrating=true;calibrationStep=0;touchHeld=false;drawCalibration();}'''
+          if old_cal not in s: raise SystemExit("calibration UI pattern not found")
+          s=s.replace(old_cal,new_cal)
+          old_player='''void drawPlayer(){
+  music::setCategory(musicCategory());
+  drawArtwork(playerArtwork());
+  // Dark translucent-like panels (solid on RGB display) keep controls readable.
+  lcd.fillRoundRect(18,12,44,30,8,screen::SHADOW);
+  screen::text(lcd,"<",40,29,&FreeSans9pt7b,screen::CREAM,32);
+  String cat=music::category();cat.toUpperCase();
+  lcd.fillRoundRect(58,12,204,30,8,screen::SHADOW);
+  screen::text(lcd,cat,160,29,&FreeSerifBold9pt7b,screen::GOLD,190);
+  String title=music::title();if(!title.length())title=tr("Musik waehlen","Wybierz muzyke","Choose music");
+  if(title.length()>34)title=title.substring(0,31)+"...";
+  lcd.fillRoundRect(34,142,252,34,8,screen::SHADOW);
+  screen::text(lcd,title,160,159,&FreeSans9pt7b,screen::CREAM,238);
+  lcd.fillRoundRect(28,187,264,45,10,screen::SHADOW);
+  screen::text(lcd,"<<",65,211,&FreeSans9pt7b,screen::GOLD,50);
+  screen::text(lcd,music::state==music::Playing?"II":">",160,211,&FreeSansBold24pt7b,screen::CREAM,55);
+  screen::text(lcd,">>",255,211,&FreeSans9pt7b,screen::GOLD,50);
+}'''
+          new_player='''void drawPlayer(){
+  music::setCategory(musicCategory());
+  drawArtwork(playerArtwork());
+  const uint16_t PANEL=0x10A3, PANEL2=0x18E3, MUTED=0xBDF7;
+
+  // Compact back button and mode chip.
+  lcd.fillCircle(27,27,18,PANEL);lcd.drawCircle(27,27,18,screen::GOLD);
+  lcd.drawFastHLine(20,27,14,screen::CREAM);lcd.drawLine(20,27,26,21,screen::CREAM);lcd.drawLine(20,27,26,33,screen::CREAM);
+  String cat=music::category();cat.toUpperCase();
+  lcd.fillRoundRect(58,10,204,34,17,PANEL);
+  screen::text(lcd,cat,160,27,&FreeSansBold9pt7b,screen::CREAM,185);
+
+  // Now-playing card: clean, modern, no oversized retro buttons.
+  lcd.fillRoundRect(20,126,280,52,16,PANEL);
+  screen::text(lcd,tr("JETZT","TERAZ","NOW PLAYING"),160,139,&FreeSans9pt7b,screen::GOLD,250);
+  String title=music::title();if(!title.length())title=tr("Keine Musik gewaehlt","Nie wybrano utworu","No track selected");
+  int dot=title.lastIndexOf('.');if(dot>0)title=title.substring(0,dot);
+  if(title.length()>38)title=title.substring(0,35)+"...";
+  screen::text(lcd,title,160,160,&FreeSans9pt7b,screen::CREAM,250);
+
+  // Thin progress accent. Real timing can be wired later without changing layout.
+  lcd.fillRoundRect(34,184,252,4,2,PANEL2);
+  if(music::state==music::Playing||music::state==music::Paused)lcd.fillRoundRect(34,184,84,4,2,screen::GOLD);
+
+  // Previous / Play-Pause / Next as circular controls.
+  lcd.fillCircle(79,214,20,PANEL);lcd.drawCircle(79,214,20,screen::GOLD);
+  lcd.fillTriangle(83,205,83,223,70,214,screen::CREAM);lcd.fillRect(68,205,3,18,screen::CREAM);
+
+  lcd.fillCircle(160,211,27,PANEL);lcd.drawCircle(160,211,27,screen::GOLD);lcd.drawCircle(160,211,26,screen::GOLD);
+  if(music::state==music::Playing){lcd.fillRoundRect(151,199,6,24,2,screen::CREAM);lcd.fillRoundRect(164,199,6,24,2,screen::CREAM);}
+  else lcd.fillTriangle(154,198,154,224,174,211,screen::CREAM);
+
+  lcd.fillCircle(241,214,20,PANEL);lcd.drawCircle(241,214,20,screen::GOLD);
+  lcd.fillTriangle(237,205,237,223,250,214,screen::CREAM);lcd.fillRect(250,205,3,18,screen::CREAM);
+}'''
+          if old_player not in s: raise SystemExit("player UI pattern not found")
+          s=s.replace(old_player,new_player)
+          old_cal_touch='''  if(calibrating){
+    calibrationRaw[calibrationStep++]=p;if(calibrationStep<3){drawCalibration();return;}
+    touch::Calibration next{};if(!touch::solve(calibrationRaw,targets,next)){calibrationStep=0;drawCalibration();return;}
+    Preferences prefs;bool saved=false;if(prefs.begin("peppi",false)){saved=prefs.putBytes("touch",&next,sizeof(next))==sizeof(next);prefs.end();}
+    calibration=next;calibrationReady=true;calibrating=false;dirty=true;if(!saved)Serial.println("Touch NVS write failed");return;
+  }
+  if(!calibrationReady){startCalibration();return;}p=touch::map(p,calibration);'''
+          new_cal_touch='''  if(calibrating){
+    // FT6336G test only: validate three points, do not distort coordinates with an affine matrix.
+    calibrationRaw[calibrationStep]=p;
+    calibrationStep++;
+    touchHeld=true;
+    if(calibrationStep<3){drawCalibration();return;}
+    calibration={0x54434831,1,0,0,0,1,0};calibrationReady=true;calibrating=false;forceFull=true;dirty=true;return;
+  }
+  p=touch::map(p,calibration);'''
+          if old_cal_touch not in s: raise SystemExit("calibration touch pattern not found")
+          s=s.replace(old_cal_touch,new_cal_touch)
           p.write_text(s)
           PY
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v44_ES3C28P/Weihnachtsuhr_v44_ES3C28P.ino
-          cat > sketch/Weihnachtsuhr_v44_ES3C28P/partitions.csv <<'EOF'
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v45_ES3C28P/Weihnachtsuhr_v45_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v45_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
           otadata,  data, ota,     0xe000,   0x2000,
@@ -62,8 +155,8 @@ jobs:
           app1,     app,  ota_1,   0x610000, 0x600000,
           spiffs,   data, spiffs,  0xC10000, 0x3E0000,
           EOF
-          grep -R "grincz" -n sketch/Weihnachtsuhr_v44_ES3C28P | head || true
-          ls -lh sketch/Weihnachtsuhr_v44_ES3C28P | head -40
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v45_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v45_ES3C28P | head -40
 
       - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
@@ -73,7 +166,7 @@ jobs:
             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
             --build-property upload.maximum_size=6291456 \
             --output-dir build \
-            sketch/Weihnachtsuhr_v44_ES3C28P
+            sketch/Weihnachtsuhr_v45_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -85,14 +178,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.4_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.5_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.4_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.5_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v4.4 - ES3C28P"
+            echo "Weihnachtsuhr v4.5 - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
             echo "Factory artwork embedded in firmware, including Grincz"
             echo "User images and music on SD; MP3/WAV/AAC/M4A/FLAC player and web upload"
@@ -105,7 +198,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v4.4-BIN
+          name: Weihnachtsuhr-ES3C28P-v4.5-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
