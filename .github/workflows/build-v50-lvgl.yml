@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v5.0 LVGL ES3C28P
+name: Build Weihnachtsuhr v5.0.1 LVGL ES3C28P
 
 on:
   push:
@@ -27,22 +27,22 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v5.0 source and embedded artwork
+      - name: Restore v5.0.1 source and embedded artwork
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/v50src sketch/Weihnachtsuhr_v50_ES3C28P
-          cat payload/part_* > /tmp/v50.b64
-          base64 -d /tmp/v50.b64 | tar -xz -C /tmp/v50src
-          cp /tmp/v50src/include/* sketch/Weihnachtsuhr_v50_ES3C28P/
-          cp /tmp/v50src/src/*.cpp sketch/Weihnachtsuhr_v50_ES3C28P/
+          mkdir -p /tmp/v501src sketch/Weihnachtsuhr_v501_ES3C28P
+          cat payload/part_* > /tmp/v501.b64
+          base64 -d /tmp/v501.b64 | tar -xz -C /tmp/v501src
+          cp /tmp/v501src/include/* sketch/Weihnachtsuhr_v501_ES3C28P/
+          cp /tmp/v501src/src/*.cpp sketch/Weihnachtsuhr_v501_ES3C28P/
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("sketch/Weihnachtsuhr_v50_ES3C28P/Touch.h")
+          p=Path("sketch/Weihnachtsuhr_v501_ES3C28P/Touch.h")
           s=p.read_text()
           s=s.replace('pinMode(RST,OUTPUT);pinMode(IRQ,INPUT_PULLUP);digitalWrite(RST,LOW);delay(10);digitalWrite(RST,HIGH);delay(250);\n  Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);',
                       'Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);\n  pinMode(RST,OUTPUT);pinMode(IRQ,INPUT);digitalWrite(RST,LOW);delay(12);digitalWrite(RST,HIGH);delay(320);')
           p.write_text(s)
-          p=Path("sketch/Weihnachtsuhr_v50_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v501_ES3C28P/main.cpp")
           s=p.read_text()
           old='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  if(digitalRead(touch::IRQ)){touchHeld=false;return;}if(touchHeld)return;\n  touch::Point p;if(!touch::raw(p))return;touchHeld=true;'''
           new='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  // FT6336G is polled over I2C. Do not gate reads on INT: some ES3C28P\n  // revisions keep INT high unless the controller is explicitly configured.\n  touch::Point p;\n  if(!touch::raw(p)){touchHeld=false;return;}\n  if(touchHeld)return;\n  touchHeld=true;'''
@@ -57,7 +57,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import base64
-          p=Path("sketch/Weihnachtsuhr_v50_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v501_ES3C28P/main.cpp")
           s=p.read_text()
           pairs=[
             ("dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oQkcpO2NlbnRlcih0cigiS2FsaWJyaWVydW5nIiwiS2FsaWJyYWNqYSIsIkNhbGlicmF0aW9uIiksMTYwLDc0LDQsR09MRCk7Y2VudGVyKHRyKCJLcmV1eiBhbnRpcHBlbiB1bmQgbG9zbGFzc2VuIiwiRG90a25paiBpIHB1c2Mga3J6eXp5ayIsIlRhcCBhbmQgcmVsZWFzZSB0aGUgY3Jvc3MiKSwxNjAsMTEwLDIpO2NlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsMTQwLDIpOwogIGF1dG8gcD10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07bGNkLmRyYXdDaXJjbGUocC54LHAueSwxMCxXSElURSk7bGNkLmRyYXdGYXN0SExpbmUocC54LTE1LHAueSwzMSxHT0xEKTtsY2QuZHJhd0Zhc3RWTGluZShwLngscC55LTE1LDMxLEdPTEQpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPXRydWU7ZHJhd0NhbGlicmF0aW9uKCk7fQ==","dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oMHgwODQyKTsKICBjZW50ZXIodHIoIlRvdWNoLVRlc3QiLCJUZXN0IGRvdHlrdSIsIlRvdWNoIHRlc3QiKSwxNjAsMzgsNCxHT0xEKTsKICBjZW50ZXIodHIoIlB1bmt0IGFudGlwcGVuIiwiRG90a25paiBwdW5rdHUiLCJUYXAgdGhlIHBvaW50IiksMTYwLDY4LDIsV0hJVEUpOwogIGNlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsOTEsMiwweEJERjcpOwogIGF1dG8gcT10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07CiAgbGNkLmRyYXdDaXJjbGUocS54LHEueSwxMyxHT0xEKTtsY2QuZHJhd0NpcmNsZShxLngscS55LDUsV0hJVEUpOwogIGxjZC5kcmF3RmFzdEhMaW5lKHEueC0yMCxxLnksNDEsR09MRCk7bGNkLmRyYXdGYXN0VkxpbmUocS54LHEueS0yMCw0MSxHT0xEKTsKICBjZW50ZXIodHIoIkZUNjMzNkcgLSBrZWluZSBLYWxpYnJpZXJ1bmcgbm9ldGlnIiwiRlQ2MzM2RyAtIGthbGlicmFjamEgbmllcG90cnplYm5hIiwiRlQ2MzM2RyAtIG5vIGNhbGlicmF0aW9uIG5lZWRlZCIpLDE2MCwyMTgsMSwweEJERjcpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPWZhbHNlO2RyYXdDYWxpYnJhdGlvbigpO30=","touch-test-ui"),
@@ -70,12 +70,12 @@ jobs:
             s=s.replace(old,new)
           p.write_text(s)
           PY
-          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v50_ES3C28P/main.cpp
+          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v501_ES3C28P/main.cpp
           python3 scripts/v47_patch.py
           python3 scripts/v48_patch.py
           python3 scripts/v50_patch.py
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v50_ES3C28P/Weihnachtsuhr_v50_ES3C28P.ino
-          cat > sketch/Weihnachtsuhr_v50_ES3C28P/partitions.csv <<'EOF'
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v501_ES3C28P/Weihnachtsuhr_v501_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v501_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
           otadata,  data, ota,     0xe000,   0x2000,
@@ -83,8 +83,8 @@ jobs:
           app1,     app,  ota_1,   0x610000, 0x600000,
           spiffs,   data, spiffs,  0xC10000, 0x3E0000,
           EOF
-          grep -R "grincz" -n sketch/Weihnachtsuhr_v50_ES3C28P | head || true
-          ls -lh sketch/Weihnachtsuhr_v50_ES3C28P | head -40
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v501_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v501_ES3C28P | head -40
 
       - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
@@ -96,7 +96,7 @@ jobs:
             --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
             --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
             --output-dir build \
-            sketch/Weihnachtsuhr_v50_ES3C28P
+            sketch/Weihnachtsuhr_v501_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -108,14 +108,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v5.0_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v5.0.1_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v5.0_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v5.0.1_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v5.0 LVGL - ES3C28P"
+            echo "Weihnachtsuhr v5.0.1 LVGL - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
             echo "Factory artwork embedded in firmware, including Grincz"
             echo "LVGL 9.3 UI / SquareLine-style components; user photos and music on SD"
@@ -123,13 +123,13 @@ jobs:
             echo
             sha256sum dist/*.bin
           } > dist/build-info.txt
-          zip -qr dist/Weihnachtsuhr_ES3C28P_v5.0_SOURCE.zip sketch/Weihnachtsuhr_v50_ES3C28P
+          zip -qr dist/Weihnachtsuhr_ES3C28P_v5.0.1_SOURCE.zip sketch/Weihnachtsuhr_v501_ES3C28P
           ls -lh dist
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v5.0-LVGL-BIN
+          name: Weihnachtsuhr-ES3C28P-v5.0.1-LVGL-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
