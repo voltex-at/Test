@@ -1,4 +1,4 @@
-name: Build Weihnachtsuhr v4.7 ES3C28P
+name: Build Weihnachtsuhr v4.8 ES3C28P
 
 on:
   push:
@@ -26,22 +26,22 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v4.7 source and embedded artwork
+      - name: Restore v4.8 source and embedded artwork
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/v47src sketch/Weihnachtsuhr_v47_ES3C28P
-          cat payload/part_* > /tmp/v47.b64
-          base64 -d /tmp/v47.b64 | tar -xz -C /tmp/v47src
-          cp /tmp/v47src/include/* sketch/Weihnachtsuhr_v47_ES3C28P/
-          cp /tmp/v47src/src/*.cpp sketch/Weihnachtsuhr_v47_ES3C28P/
+          mkdir -p /tmp/v48src sketch/Weihnachtsuhr_v48_ES3C28P
+          cat payload/part_* > /tmp/v48.b64
+          base64 -d /tmp/v48.b64 | tar -xz -C /tmp/v48src
+          cp /tmp/v48src/include/* sketch/Weihnachtsuhr_v48_ES3C28P/
+          cp /tmp/v48src/src/*.cpp sketch/Weihnachtsuhr_v48_ES3C28P/
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("sketch/Weihnachtsuhr_v47_ES3C28P/Touch.h")
+          p=Path("sketch/Weihnachtsuhr_v48_ES3C28P/Touch.h")
           s=p.read_text()
           s=s.replace('pinMode(RST,OUTPUT);pinMode(IRQ,INPUT_PULLUP);digitalWrite(RST,LOW);delay(10);digitalWrite(RST,HIGH);delay(250);\n  Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);',
                       'Wire.begin(SDA_PIN,SCL_PIN);Wire.setClock(400000);\n  pinMode(RST,OUTPUT);pinMode(IRQ,INPUT);digitalWrite(RST,LOW);delay(12);digitalWrite(RST,HIGH);delay(320);')
           p.write_text(s)
-          p=Path("sketch/Weihnachtsuhr_v47_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v48_ES3C28P/main.cpp")
           s=p.read_text()
           old='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  if(digitalRead(touch::IRQ)){touchHeld=false;return;}if(touchHeld)return;\n  touch::Point p;if(!touch::raw(p))return;touchHeld=true;'''
           new='''void pollTouch() {\n  uint32_t now=millis();if(now-lastTouch<25)return;lastTouch=now;\n  // FT6336G is polled over I2C. Do not gate reads on INT: some ES3C28P\n  // revisions keep INT high unless the controller is explicitly configured.\n  touch::Point p;\n  if(!touch::raw(p)){touchHeld=false;return;}\n  if(touchHeld)return;\n  touchHeld=true;'''
@@ -56,7 +56,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import base64
-          p=Path("sketch/Weihnachtsuhr_v47_ES3C28P/main.cpp")
+          p=Path("sketch/Weihnachtsuhr_v48_ES3C28P/main.cpp")
           s=p.read_text()
           pairs=[
             ("dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oQkcpO2NlbnRlcih0cigiS2FsaWJyaWVydW5nIiwiS2FsaWJyYWNqYSIsIkNhbGlicmF0aW9uIiksMTYwLDc0LDQsR09MRCk7Y2VudGVyKHRyKCJLcmV1eiBhbnRpcHBlbiB1bmQgbG9zbGFzc2VuIiwiRG90a25paiBpIHB1c2Mga3J6eXp5ayIsIlRhcCBhbmQgcmVsZWFzZSB0aGUgY3Jvc3MiKSwxNjAsMTEwLDIpO2NlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsMTQwLDIpOwogIGF1dG8gcD10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07bGNkLmRyYXdDaXJjbGUocC54LHAueSwxMCxXSElURSk7bGNkLmRyYXdGYXN0SExpbmUocC54LTE1LHAueSwzMSxHT0xEKTtsY2QuZHJhd0Zhc3RWTGluZShwLngscC55LTE1LDMxLEdPTEQpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPXRydWU7ZHJhd0NhbGlicmF0aW9uKCk7fQ==","dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oMHgwODQyKTsKICBjZW50ZXIodHIoIlRvdWNoLVRlc3QiLCJUZXN0IGRvdHlrdSIsIlRvdWNoIHRlc3QiKSwxNjAsMzgsNCxHT0xEKTsKICBjZW50ZXIodHIoIlB1bmt0IGFudGlwcGVuIiwiRG90a25paiBwdW5rdHUiLCJUYXAgdGhlIHBvaW50IiksMTYwLDY4LDIsV0hJVEUpOwogIGNlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsOTEsMiwweEJERjcpOwogIGF1dG8gcT10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07CiAgbGNkLmRyYXdDaXJjbGUocS54LHEueSwxMyxHT0xEKTtsY2QuZHJhd0NpcmNsZShxLngscS55LDUsV0hJVEUpOwogIGxjZC5kcmF3RmFzdEhMaW5lKHEueC0yMCxxLnksNDEsR09MRCk7bGNkLmRyYXdGYXN0VkxpbmUocS54LHEueS0yMCw0MSxHT0xEKTsKICBjZW50ZXIodHIoIkZUNjMzNkcgLSBrZWluZSBLYWxpYnJpZXJ1bmcgbm9ldGlnIiwiRlQ2MzM2RyAtIGthbGlicmFjamEgbmllcG90cnplYm5hIiwiRlQ2MzM2RyAtIG5vIGNhbGlicmF0aW9uIG5lZWRlZCIpLDE2MCwyMTgsMSwweEJERjcpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPWZhbHNlO2RyYXdDYWxpYnJhdGlvbigpO30=","touch-test-ui"),
@@ -69,11 +69,12 @@ jobs:
             s=s.replace(old,new)
           p.write_text(s)
           PY
-          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v47_ES3C28P/main.cpp
+          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v48_ES3C28P/main.cpp
           echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCByZQpwPVBhdGgoInNrZXRjaC9XZWlobmFjaHRzdWhyX3Y0Nl9FUzNDMjhQL21haW4uY3BwIikKcz1wLnJlYWRfdGV4dCgpCgpzPXMucmVwbGFjZSgnYnV0dG9uKHRyKCJadXJ1ZWNrIiwiV3JvYyIsIkJhY2siKSwxMiwxMzYpO2J1dHRvbih0cigiS2FsaWJyaWVyZW4iLCJLYWxpYnJhY2phIiwiQ2FsaWJyYXRlIiksMTYyLDE0Nik7JywKICAgICAgICAgICAgJ2J1dHRvbih0cigiWnVydWVjayIsIldyb2MiLCJCYWNrIiksODIsMTU2KTsnKQoKcGxheWVyID0gcicnJ3ZvaWQgZHJhd1BsYXllckR5bmFtaWMoKXsKICBjb25zdCB1aW50MTZfdCBQQU5FTD0weDEwQTMsUEFORUwyPTB4MzE4NjsKICBTdHJpbmcgdGl0bGU9bXVzaWM6OnRpdGxlKCk7CiAgaWYoIXRpdGxlLmxlbmd0aCgpKXRpdGxlPXRyKCJLZWluZSBNdXNpayBnZXdhZWhsdCIsIk5pZSB3eWJyYW5vIG11enlraSIsIk5vIHRyYWNrIHNlbGVjdGVkIik7CiAgaW50IGRvdD10aXRsZS5sYXN0SW5kZXhPZignLicpO2lmKGRvdD4wKXRpdGxlPXRpdGxlLnN1YnN0cmluZygwLGRvdCk7CiAgaWYodGl0bGUubGVuZ3RoKCk+MzgpdGl0bGU9dGl0bGUuc3Vic3RyaW5nKDAsMzUpKyIuLi4iOwogIGxjZC5maWxsUm91bmRSZWN0KDI0LDg4LDI3Miw1OCwxNixQQU5FTCk7CiAgc2NyZWVuOjp0ZXh0KGxjZCx0cigiSkVUWlQiLCJURVJBWiIsIk5PVyBQTEFZSU5HIiksMTYwLDEwMywmRnJlZVNhbnM5cHQ3YixzY3JlZW46OkdPTEQsMjUwKTsKICBzY3JlZW46OnRleHQobGNkLHRpdGxlLDE2MCwxMzAsJkZyZWVTYW5zOXB0N2Isc2NyZWVuOjpDUkVBTSwyNTApOwogIGxjZC5maWxsUm91bmRSZWN0KDM4LDE1MSwyNDQsMzAsMTUsUEFORUwpOwogIHNjcmVlbjo6dGV4dChsY2QsIlZPTCIsNTgsMTY2LCZGcmVlU2FuczlwdDdiLHNjcmVlbjo6Q1JFQU0sNDIpOwogIGNvbnN0IGludCB4MT04OCx4Mj0yNTcseT0xNjY7CiAgbGNkLmZpbGxSb3VuZFJlY3QoeDEseS0zLHgyLXgxLDYsMyxQQU5FTDIpOwogIGludCB2eD14MSsoaW50KShtdXNpYzo6dm9sdW1lLmxvYWQoKSooeDIteDEpLzEwMFUpOwogIGlmKHZ4PngxKWxjZC5maWxsUm91bmRSZWN0KHgxLHktMyx2eC14MSw2LDMsc2NyZWVuOjpHT0xEKTsKICBsY2QuZmlsbENpcmNsZSh2eCx5LDgsc2NyZWVuOjpDUkVBTSk7bGNkLmRyYXdDaXJjbGUodngseSw4LHNjcmVlbjo6R09MRCk7CiAgbGNkLmZpbGxDaXJjbGUoNzgsMjEyLDIwLFBBTkVMKTtsY2QuZHJhd0NpcmNsZSg3OCwyMTIsMjAsc2NyZWVuOjpHT0xEKTsKICBsY2QuZmlsbFRyaWFuZ2xlKDczLDIwMyw3MywyMjEsNjEsMjEyLHNjcmVlbjo6Q1JFQU0pO2xjZC5maWxsUmVjdCg1OSwyMDMsMywxOCxzY3JlZW46OkNSRUFNKTsKICBsY2QuZmlsbENpcmNsZSgxNjAsMjEwLDI3LFBBTkVMKTtsY2QuZHJhd0NpcmNsZSgxNjAsMjEwLDI3LHNjcmVlbjo6R09MRCk7bGNkLmRyYXdDaXJjbGUoMTYwLDIxMCwyNixzY3JlZW46OkdPTEQpOwogIGlmKG11c2ljOjpzdGF0ZT09bXVzaWM6OlBsYXlpbmcpe2xjZC5maWxsUm91bmRSZWN0KDE1MCwxOTgsNiwyNCwyLHNjcmVlbjo6Q1JFQU0pO2xjZC5maWxsUm91bmRSZWN0KDE2NCwxOTgsNiwyNCwyLHNjcmVlbjo6Q1JFQU0pO30KICBlbHNlIGxjZC5maWxsVHJpYW5nbGUoMTU0LDE5NywxNTQsMjIzLDE3NSwyMTAsc2NyZWVuOjpDUkVBTSk7CiAgbGNkLmZpbGxDaXJjbGUoMjQyLDIxMiwyMCxQQU5FTCk7bGNkLmRyYXdDaXJjbGUoMjQyLDIxMiwyMCxzY3JlZW46OkdPTEQpOwogIGxjZC5maWxsVHJpYW5nbGUoMjQ3LDIwMywyNDcsMjIxLDI1OSwyMTIsc2NyZWVuOjpDUkVBTSk7bGNkLmZpbGxSZWN0KDI1OSwyMDMsMywxOCxzY3JlZW46OkNSRUFNKTsKfQoKdm9pZCBkcmF3UGxheWVyKCl7CiAgbXVzaWM6OnNldENhdGVnb3J5KG11c2ljQ2F0ZWdvcnkoKSk7CiAgZHJhd0FydHdvcmsocGxheWVyQXJ0d29yaygpKTsKICBjb25zdCB1aW50MTZfdCBQQU5FTD0weDEwQTM7CiAgbGNkLmZpbGxDaXJjbGUoMjcsMjcsMjAsUEFORUwpO2xjZC5kcmF3Q2lyY2xlKDI3LDI3LDIwLHNjcmVlbjo6R09MRCk7CiAgbGNkLmRyYXdGYXN0SExpbmUoMTgsMjcsMTYsc2NyZWVuOjpDUkVBTSk7CiAgbGNkLmRyYXdMaW5lKDE4LDI3LDI1LDIwLHNjcmVlbjo6Q1JFQU0pO2xjZC5kcmF3TGluZSgxOCwyNywyNSwzNCxzY3JlZW46OkNSRUFNKTsKICBkcmF3UGxheWVyRHluYW1pYygpOwp9JycnCnMsbj1yZS5zdWJuKHIndm9pZCBkcmF3UGxheWVyXChcKVx7Lio/XG5cfVxuXG52b2lkIHJlbmRlclwoXClceycscGxheWVyKydcblxudm9pZCByZW5kZXIoKXsnLHMsZmxhZ3M9cmUuUykKaWYgbiE9MTogcmFpc2UgU3lzdGVtRXhpdChmImRyYXdQbGF5ZXIgcmVwbGFjZW1lbnQgY291bnQ9e259IikKcz1zLnJlcGxhY2UoJ2Vsc2UgaWYocGxheWVyU2NyZWVuKXtpZihhbGwpZHJhd1BsYXllcigpO30nLCdlbHNlIGlmKHBsYXllclNjcmVlbil7aWYoYWxsKWRyYXdQbGF5ZXIoKTtlbHNlIGRyYXdQbGF5ZXJEeW5hbWljKCk7fScpCnM9cy5yZXBsYWNlKCdpZihub3dUcmFjayE9bGFzdFRyYWNrKXtsYXN0VHJhY2s9bm93VHJhY2s7Zm9yY2VGdWxsPXBsYXllclNjcmVlbjtkaXJ0eT10cnVlO30nLCdpZihub3dUcmFjayE9bGFzdFRyYWNrKXtsYXN0VHJhY2s9bm93VHJhY2s7ZGlydHk9dHJ1ZTt9JykKCnBvbGwgPSByJycndm9pZCBwb2xsVG91Y2goKSB7CiAgdWludDMyX3Qgbm93PW1pbGxpcygpO2lmKG5vdy1sYXN0VG91Y2g8MjUpcmV0dXJuO2xhc3RUb3VjaD1ub3c7CiAgc3RhdGljIGJvb2wgdm9sdW1lRHJhZz1mYWxzZTsKICB0b3VjaDo6UG9pbnQgcDsKICBpZighdG91Y2g6OnJhdyhwKSl7CiAgICBpZih2b2x1bWVEcmFnKXsKICAgICAgUHJlZmVyZW5jZXMgcHJlZnM7aWYocHJlZnMuYmVnaW4oInBlcHBpIixmYWxzZSkpe3ByZWZzLnB1dFVDaGFyKCJ2b2x1bWUiLCh1aW50OF90KW11c2ljOjp2b2x1bWUubG9hZCgpKTtwcmVmcy5lbmQoKTt9CiAgICAgIHZvbHVtZURyYWc9ZmFsc2U7CiAgICB9CiAgICB0b3VjaEhlbGQ9ZmFsc2U7cmV0dXJuOwogIH0KICBwPXRvdWNoOjptYXAocCxjYWxpYnJhdGlvbik7CiAgaWYocC54PDB8fHAueD49MzIwfHxwLnk8MHx8cC55Pj0yNDApcmV0dXJuOwogIGlmKHBsYXllclNjcmVlbiAmJiBwLnk+PTE0NiAmJiBwLnk8PTE4NCAmJiBwLng+PTc2ICYmIHAueDw9Mjc1KXsKICAgIGludCBsZXZlbD1jb25zdHJhaW4oKHAueC04OCkqMTAwLygyNTctODgpLDAsMTAwKTsKICAgIG11c2ljOjpzZXRWb2x1bWUoKHVuc2lnbmVkKWxldmVsKTt2b2x1bWVEcmFnPXRydWU7ZGlydHk9dHJ1ZTtmb3JjZUZ1bGw9ZmFsc2U7cmV0dXJuOwogIH0KICBpZih0b3VjaEhlbGQpcmV0dXJuOwogIHRvdWNoSGVsZD10cnVlOwogIGlmKHBsYXllclNjcmVlbil7CiAgICBpZihwLng8NTgmJnAueTw2MCl7cGxheWVyU2NyZWVuPWZhbHNlO2ZvcmNlRnVsbD10cnVlO2RpcnR5PXRydWU7cmV0dXJuO30KICAgIGlmKHAueT49MTg1KXsKICAgICAgbXVzaWM6OnNldENhdGVnb3J5KG11c2ljQ2F0ZWdvcnkoKSk7CiAgICAgIGlmKHAueDwxMTUpbXVzaWM6OnByZXZpb3VzKHNkUmVhZHkpOwogICAgICBlbHNlIGlmKHAueD4yMDUpbXVzaWM6Om5leHQoc2RSZWFkeSk7CiAgICAgIGVsc2UgdG9nZ2xlTXVzaWMoKTsKICAgICAgZm9yY2VGdWxsPWZhbHNlO2RpcnR5PXRydWU7cmV0dXJuOwogICAgfQogIH0KICBlbHNlIGlmKGNvbmZpZ1NjcmVlbiYmcC55Pj0yMDUpe2NvbmZpZ1NjcmVlbj1mYWxzZTtmb3JjZUZ1bGw9dHJ1ZTtkaXJ0eT10cnVlO30KICBlbHNlIGlmKCFjb25maWdTY3JlZW4mJnAueT49MTkwJiZwLng8PTU0KW9wZW5BUCgpOwogIGVsc2UgaWYoIWNvbmZpZ1NjcmVlbiYmcC55Pj0xOTAmJnAueD49MjY2KXtwbGF5ZXJTY3JlZW49dHJ1ZTtmb3JjZUZ1bGw9dHJ1ZTtkaXJ0eT10cnVlO30KfScnJwpzLG49cmUuc3VibihyJ3ZvaWQgcG9sbFRvdWNoXChcKSBcey4qP1xuXH1cbnZvaWQgbm9DYWNoZVwoXCknLHBvbGwrJ1xudm9pZCBub0NhY2hlKCknLHMsZmxhZ3M9cmUuUykKaWYgbiE9MTogcmFpc2UgU3lzdGVtRXhpdChmInBvbGxUb3VjaCByZXBsYWNlbWVudCBjb3VudD17bn0iKQpwLndyaXRlX3RleHQocykK' | base64 -d | python3
           python3 scripts/v47_patch.py
-          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v47_ES3C28P/Weihnachtsuhr_v47_ES3C28P.ino
-          cat > sketch/Weihnachtsuhr_v47_ES3C28P/partitions.csv <<'EOF'
+          python3 scripts/v48_patch.py
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v48_ES3C28P/Weihnachtsuhr_v48_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v48_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
           otadata,  data, ota,     0xe000,   0x2000,
@@ -81,8 +82,8 @@ jobs:
           app1,     app,  ota_1,   0x610000, 0x600000,
           spiffs,   data, spiffs,  0xC10000, 0x3E0000,
           EOF
-          grep -R "grincz" -n sketch/Weihnachtsuhr_v47_ES3C28P | head || true
-          ls -lh sketch/Weihnachtsuhr_v47_ES3C28P | head -40
+          grep -R "grincz" -n sketch/Weihnachtsuhr_v48_ES3C28P | head || true
+          ls -lh sketch/Weihnachtsuhr_v48_ES3C28P | head -40
 
       - name: Compile ESP32-S3 16MB / 8MB PSRAM
         run: |
@@ -92,7 +93,7 @@ jobs:
             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
             --build-property upload.maximum_size=6291456 \
             --output-dir build \
-            sketch/Weihnachtsuhr_v47_ES3C28P
+            sketch/Weihnachtsuhr_v48_ES3C28P
           ls -lah build
 
       - name: Package BIN
@@ -104,14 +105,14 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.7_FIRMWARE.bin
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v4.8_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.7_FULL.bin
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v4.8_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v4.7 - ES3C28P"
+            echo "Weihnachtsuhr v4.8 - ES3C28P"
             echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
             echo "Factory artwork embedded in firmware, including Grincz"
             echo "User images and music on SD; MP3/WAV/AAC/M4A/FLAC player and web upload"
@@ -124,7 +125,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Weihnachtsuhr-ES3C28P-v4.7-BIN
+          name: Weihnachtsuhr-ES3C28P-v4.8-BIN
           path: dist/
           if-no-files-found: error
           retention-days: 30
