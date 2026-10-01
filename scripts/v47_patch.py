@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 
-p = Path("sketch/Weihnachtsuhr_v47_ES3C28P/main.cpp")
+p = next(Path("sketch").glob("Weihnachtsuhr_v*_ES3C28P/main.cpp"))
 s = p.read_text()
 
 player = r'''void drawPlayerDynamic(){
