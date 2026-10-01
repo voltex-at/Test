@@ -92,6 +92,12 @@ for bad in ('XPT2046','TOUCH_X_MIN','TOUCH_X_MAX','TOUCH_Y_MIN','TOUCH_Y_MAX'):
     if bad in s:
         raise SystemExit('legacy touch token remains: '+bad)
 
+# Repair API block after removing the legacy calibration endpoint.
+s = s.replace('server.on("/api/sd",HTTP_POST,[](){if(authorize(true)){if(mountSD())ok();else apiError(409,"audio_busy");}});ok();}});',
+              'server.on("/api/sd",HTTP_POST,[](){if(authorize(true)){if(mountSD())ok();else apiError(409,"audio_busy");}});')
+# Remove any orphaned tail left by the deleted calibration lambda.
+s = s.replace(');ok();}});\n  server.onNotFound', ');\n  server.onNotFound')
+
 main.write_text(s)
 
 w = web.read_text()
