@@ -25,4 +25,4 @@ jobs:
           echo '===== main section 1 ====='
           sed -n '1,260p' /tmp/src/src/main.cpp
           echo '===== main section 2 ====='
-          sed -n '260,620p' /tmp/src/src/main.cpp
+          sed -n '260,760p' /tmp/src/src/main.cpp
