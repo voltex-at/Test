@@ -1,0 +1,62 @@
+name: Build Peppi v5.1 DIAG LCD LVGL Touch
+
+on:
+  push:
+    branches: [v5-diag-lvgl-touch]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core and libraries
+        run: |
+          set -euxo pipefail
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib update-index
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "lvgl@9.3.0"
+
+      - name: Compile diagnostic
+        run: |
+          set -euxo pipefail
+          mkdir -p build
+          arduino-cli compile             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app"             --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1"             --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1"             --output-dir build             diag/Peppi_v5_1_DIAG_LCD_LVGL_TOUCH
+          ls -lah build
+
+      - name: Package
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          APP="$(find build -maxdepth 1 -type f -name '*.ino.bin' | head -n1)"
+          BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
+          PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
+          cp "$APP" dist/Peppi_v5.1_DIAG_LCD_LVGL_TOUCH_FIRMWARE.bin
+          cp "$BOOT" dist/bootloader.bin
+          cp "$PART" dist/partitions.bin
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then cp "$MERGED" dist/Peppi_v5.1_DIAG_LCD_LVGL_TOUCH_FULL.bin; fi
+          cp -r diag/Peppi_v5_1_DIAG_LCD_LVGL_TOUCH dist/SOURCE
+          {
+            echo "PEPPI v5.1 DIAG - BLACK ES3C28P"
+            echo "Only LCD ILI9341V + LVGL 9.3 + FT6336G"
+            echo "NO AUDIO / NO SD / NO WIFI"
+            echo "Git commit: $GITHUB_SHA"
+            sha256sum dist/*.bin
+          } > dist/build-info.txt
+          zip -qr dist/Peppi_v5.1_DIAG_LCD_LVGL_TOUCH_SOURCE.zip diag/Peppi_v5_1_DIAG_LCD_LVGL_TOUCH
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Peppi-v5.1-DIAG-LCD-LVGL-TOUCH
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
