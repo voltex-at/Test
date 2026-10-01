@@ -45,6 +45,7 @@ lv_obj_t* v5Screen=nullptr;
 uint8_t* v5BufA=nullptr;
 uint8_t* v5BufB=nullptr;
 bool v5Ready=false;
+volatile uint32_t v5FlushCount=0;
 
 V5Palette v5Palette(){
   switch(eventSettings.mode){
@@ -62,7 +63,10 @@ V5Palette v5Palette(){
 static lv_color_t v5c(uint32_t rgb){return lv_color_hex(rgb);}
 static void v5Flush(lv_display_t* disp,const lv_area_t* area,uint8_t* px){
   const uint16_t w=uint16_t(area->x2-area->x1+1),h=uint16_t(area->y2-area->y1+1);
+  // LVGL 9 RGB565 draw buffers are byte-oriented. ILI9341 expects MSB first.
+  lv_draw_sw_rgb565_swap(px,(uint32_t)w*h);
   lcd.pushImage(area->x1,area->y1,w,h,reinterpret_cast<const uint16_t*>(px));
+  ++v5FlushCount;
   lv_display_flush_ready(disp);
 }
 static void v5Touch(lv_indev_t*,lv_indev_data_t* data){
@@ -177,10 +181,11 @@ static void v5UiBegin(){
   v5BufB=(uint8_t*)heap_caps_malloc(bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   if(!v5BufA)v5BufA=(uint8_t*)malloc(bytes);if(!v5BufB)v5BufB=(uint8_t*)malloc(bytes);
   if(!v5BufA||!v5BufB){Serial.println("LVGL buffer allocation failed");return;}
-  v5Display=lv_display_create(320,240);lv_display_set_color_format(v5Display,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(v5Display,v5Flush);
+  v5Display=lv_display_create(320,240);lv_display_set_default(v5Display);lv_display_set_color_format(v5Display,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(v5Display,v5Flush);
   lv_display_set_buffers(v5Display,v5BufA,v5BufB,bytes,LV_DISPLAY_RENDER_MODE_PARTIAL);
   v5Input=lv_indev_create();lv_indev_set_type(v5Input,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(v5Input,v5Touch);
   v5Screen=lv_obj_create(nullptr);lv_obj_set_size(v5Screen,320,240);lv_screen_load(v5Screen);v5Ready=true;
+  lv_obj_invalidate(v5Screen);
 }
 
 '''
@@ -192,6 +197,8 @@ s, n = re.subn(r'void render\(\)\{.*?\n\}\nvoid pollTouch\(\) \{.*?\n\}\nvoid no
   else if(playerScreen)v5Player();
   else if(eventSettings.mode==countdown::PhotoAlbum){drawPhotoAlbum();}
   else v5Home();
+  // Force the first frame immediately; do not wait for LVGL's refresh timer.
+  if(v5LvActive()){lv_obj_invalidate(v5Screen);lv_refr_now(v5Display);}
   forceFull=false;dirty=false;lastRender=millis();
 }
 void pollTouch(){ /* LVGL reads FT6336G through v5Touch(). */ }
@@ -204,7 +211,7 @@ new = 'touch::begin();music::begin();mountSD();v5UiBegin();'
 if old not in s: raise SystemExit('setup init anchor missing')
 s = s.replace(old,new,1)
 s = s.replace('Weihnachtsuhr v4.2 / ES3C28P. Hold BOOT for 3s after startup to open setup.',
-              'Weihnachtsuhr v5.0 LVGL / ES3C28P. Hold BOOT for 3s after startup to open setup.')
+              'Weihnachtsuhr v5.0.1 LVGL / ES3C28P. Hold BOOT for 3s after startup to open setup.')
 
 old_loop = '''void loop() {
   if(!ready){delay(50);return;}server.handleClient();if(apActive)dns.processNextRequest();wifiTick();pollBoot();pollTouch();if(eventSettings.mode!=countdown::PhotoAlbum){music::setCategory(musicCategory());music::loop(sdReady);}'''
@@ -219,5 +226,5 @@ s = s.replace('  if(dirty&&millis()-lastRender>100)render();delay(2);\n}',
 main.write_text(s)
 
 w = web.read_text()
-w = w.replace('v4.8 ES3C28P','v5.0 LVGL ES3C28P').replace('v4.3 ES3C28P','v5.0 LVGL ES3C28P')
+w = w.replace('v4.8 ES3C28P','v5.0.1 LVGL ES3C28P').replace('v4.3 ES3C28P','v5.0.1 LVGL ES3C28P')
 web.write_text(w)
