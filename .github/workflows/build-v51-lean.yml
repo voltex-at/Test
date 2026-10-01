@@ -1,0 +1,121 @@
+name: Build Weihnachtsuhr v5.1 Lean ES3C28P
+
+on:
+  push:
+    branches: [v43-es3c28p-final]
+    paths:
+      - '.github/workflows/build-v51-lean.yml'
+      - 'lean_patch/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32-S3 core and libraries
+        run: |
+          set -euxo pipefail
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib update-index
+          arduino-cli lib install "TJpg_Decoder"
+          arduino-cli lib install "Adafruit GFX Library"
+          mkdir -p "$HOME/Arduino/libraries"
+          git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
+
+      - name: Restore proven v4.3 ES3C28P source
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/base
+          for i in $(seq -w 0 11); do
+            curl -fsSL "https://raw.githubusercontent.com/voltex-at/Test/v42-es3c28p-final/payload/part_${i}" -o "/tmp/part_${i}"
+          done
+          cat /tmp/part_* > /tmp/base.b64
+          base64 -d /tmp/base.b64 | tar -xz -C /tmp/base
+          test -f /tmp/base/src/main.cpp
+          test -f /tmp/base/include/Artwork.h
+          test -f /tmp/base/web/index.html
+
+      - name: Apply lean Countdown Mode architecture
+        run: |
+          set -euxo pipefail
+          python3 lean_patch/apply_lean_v51.py /tmp/base lean_patch/edits.json
+          grep -q 'Grincz is intentionally shown on 24.12 and 06.01' /tmp/base/include/Calendar.h
+          grep -q 'Silvester=6' /tmp/base/include/Countdown.h
+          grep -q 'last 15 seconds' /tmp/base/src/main.cpp
+          ! grep -q 'grincz_alt' /tmp/base/include/Artwork.h
+          ! grep -q 'normal_alt' /tmp/base/include/Artwork.h
+          ! grep -q 'valentines' /tmp/base/include/Artwork.h
+          test "$(grep -c '^{"' /tmp/base/include/Artwork.h)" -eq 21
+
+      - name: Prepare Arduino sketch
+        run: |
+          set -euxo pipefail
+          mkdir -p sketch/Weihnachtsuhr_v51_ES3C28P
+          cp /tmp/base/include/* sketch/Weihnachtsuhr_v51_ES3C28P/
+          cp /tmp/base/src/*.cpp sketch/Weihnachtsuhr_v51_ES3C28P/
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_v51_ES3C28P.ino
+          cat > sketch/Weihnachtsuhr_v51_ES3C28P/partitions.csv <<'EOF'
+          # Name,   Type, SubType, Offset,   Size,     Flags
+          nvs,      data, nvs,     0x9000,   0x5000,
+          otadata,  data, ota,     0xe000,   0x2000,
+          app0,     app,  ota_0,   0x10000,  0x600000,
+          app1,     app,  ota_1,   0x610000, 0x600000,
+          spiffs,   data, spiffs,  0xC10000, 0x3E0000,
+          EOF
+          ls -lh sketch/Weihnachtsuhr_v51_ES3C28P/Artwork.h sketch/Weihnachtsuhr_v51_ES3C28P/WebPage.h
+
+      - name: Compile ESP32-S3 16MB / OPI PSRAM
+        run: |
+          set -euxo pipefail
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
+            --build-property upload.maximum_size=6291456 \
+            --output-dir build \
+            sketch/Weihnachtsuhr_v51_ES3C28P
+          ls -lah build
+
+      - name: Package BIN
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          APP="$(find build -maxdepth 1 -type f -name '*.ino.bin' | head -n1)"
+          BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
+          PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
+          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v5.1_FIRMWARE.bin
+          cp "$BOOT" dist/bootloader.bin
+          cp "$PART" dist/partitions.bin
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
+            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v5.1_FULL.bin
+          fi
+          {
+            echo "Weihnachtsuhr v5.1 Lean - ES3C28P"
+            echo "ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
+            echo "Countdown Modes: Christmas, Silvester, Birthday, Easter, Halloween, Urlaub"
+            echo "Christmas special scenes: Krampus 05.12, Nikolaus 06.12, Grincz 24.12 and 06.01"
+            echo "21 factory JPGs in flash; no *_alt or Valentines assets"
+            echo "Wi-Fi and MP3 artwork assigned per Countdown Mode"
+            echo "User custom JPGs and music stay on SD"
+            echo "Silvester: second countdown during final 15 seconds of the year"
+            echo "Git commit: $GITHUB_SHA"
+            echo
+            sha256sum dist/*.bin
+          } > dist/build-info.txt
+          ls -lh dist
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weihnachtsuhr-ES3C28P-v5.1-Lean-BIN
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
