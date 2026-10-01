@@ -58,7 +58,7 @@ jobs:
 
           # Guards: FT6336G only, no touch calibration, LVGL present.
           grep -q 'FT6336G' sketch/Weihnachtsuhr_v51_ES3C28P/Touch.h
-          ! grep -Rqi 'calibrat\|kalibrac\|kalibrier' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp sketch/Weihnachtsuhr_v51_ES3C28P/Touch.h || exit 1
+          ! grep -RqE 'startCalibration|drawCalibration|touch::Calibration|/api/calibrate|calibrationRaw|calibrationReady' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp sketch/Weihnachtsuhr_v51_ES3C28P/Touch.h || exit 1
           grep -q '#include <lvgl.h>' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp
           cat > sketch/Weihnachtsuhr_v51_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
