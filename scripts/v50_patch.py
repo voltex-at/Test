@@ -63,8 +63,8 @@ V5Palette v5Palette(){
 static lv_color_t v5c(uint32_t rgb){return lv_color_hex(rgb);}
 static void v5Flush(lv_display_t* disp,const lv_area_t* area,uint8_t* px){
   const uint16_t w=uint16_t(area->x2-area->x1+1),h=uint16_t(area->y2-area->y1+1);
-  // LVGL 9 RGB565 draw buffers are byte-oriented. ILI9341 expects MSB first.
-  lv_draw_sw_rgb565_swap(px,(uint32_t)w*h);
+  // PeppiDisplay::pushImage() consumes native uint16_t RGB565 values and
+  // SPI::transfer16() sends them MSB first. Do NOT byte-swap the LVGL buffer.
   lcd.pushImage(area->x1,area->y1,w,h,reinterpret_cast<const uint16_t*>(px));
   ++v5FlushCount;
   lv_display_flush_ready(disp);
