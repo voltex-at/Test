@@ -22,7 +22,8 @@ jobs:
           arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli lib update-index
           arduino-cli lib install "TJpg_Decoder"
-          arduino-cli lib install "Adafruit GFX Library"\n          arduino-cli lib install "lvgl@9.3.0"
+          arduino-cli lib install "Adafruit GFX Library"
+          arduino-cli lib install "lvgl@9.3.0"
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
@@ -71,6 +72,7 @@ jobs:
           PY
           sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v50_ES3C28P/main.cpp
           python3 scripts/v47_patch.py
+          python3 scripts/v48_patch.py
           python3 scripts/v50_patch.py
           echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v50_ES3C28P/Weihnachtsuhr_v50_ES3C28P.ino
           cat > sketch/Weihnachtsuhr_v50_ES3C28P/partitions.csv <<'EOF'
