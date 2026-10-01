@@ -1,0 +1,28 @@
+name: Inspect v5 source
+on:
+  push:
+    branches: [v5-lvgl]
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct source
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/src
+          cat payload/part_* > /tmp/src.b64
+          base64 -d /tmp/src.b64 | tar -xz -C /tmp/src
+          echo '===== PeppiDisplay.h ====='
+          cat /tmp/src/include/PeppiDisplay.h
+          echo '===== PeppiDisplay.cpp ====='
+          cat /tmp/src/src/PeppiDisplay.cpp
+          echo '===== Touch.h ====='
+          cat /tmp/src/include/Touch.h
+          echo '===== main globals/setup/render/touch ====='
+          grep -n -E 'PeppiDisplay|lcd|void setup|void loop|void render|void pollTouch|void drawArtwork|TJpg|music::' /tmp/src/src/main.cpp | head -220
+          echo '===== main section 1 ====='
+          sed -n '1,260p' /tmp/src/src/main.cpp
+          echo '===== main section 2 ====='
+          sed -n '260,620p' /tmp/src/src/main.cpp
