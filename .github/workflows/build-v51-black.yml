@@ -1,8 +1,8 @@
-name: Build Weihnachtsuhr v5.1 LVGL ES3C28P
+name: Build Peppi v5 LVGL from user v4.6 ES3C28P
 
 on:
   push:
-    branches: [v51-black-es3c28p]
+    branches: [v5-user-src-build]
   workflow_dispatch:
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           git clone --depth 1 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
 
-      - name: Restore v5.1 source and embedded artwork
+      - name: Restore base and apply exact user-v4.6 LVGL source
         run: |
           set -euxo pipefail
           mkdir -p /tmp/v51src sketch/Weihnachtsuhr_v51_ES3C28P
@@ -43,7 +43,23 @@ jobs:
           python3 scripts/v48_patch.py
           python3 scripts/v50_patch.py
           python3 scripts/v51_black_patch.py
+
+          # Transform the known-good black-board base exactly into the LVGL
+          # source generated from the user's uploaded v4.6 ArduinoIDE project.
+          cat v5userpatchgz/part_* > /tmp/userpatch.gz.b64
+          base64 -d /tmp/userpatch.gz.b64 > /tmp/userpatch.gz
+          gzip -dc /tmp/userpatch.gz > /tmp/user.patch
+          (
+            cd sketch/Weihnachtsuhr_v51_ES3C28P
+            patch -p1 --forward --batch < /tmp/user.patch
+          )
+          cp v5userpatch/FactoryAssets.h sketch/Weihnachtsuhr_v51_ES3C28P/FactoryAssets.h
           echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_v51_ES3C28P.ino
+
+          # Guards: FT6336G only, no touch calibration, LVGL present.
+          grep -q 'FT6336G' sketch/Weihnachtsuhr_v51_ES3C28P/Touch.h
+          ! grep -Rqi 'calibrat\|kalibrac\|kalibrier' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp sketch/Weihnachtsuhr_v51_ES3C28P/Touch.h || exit 1
+          grep -q '#include <lvgl.h>' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp
           cat > sketch/Weihnachtsuhr_v51_ES3C28P/partitions.csv <<'EOF'
           # Name,   Type, SubType, Offset,   Size,     Flags
           nvs,      data, nvs,     0x9000,   0x5000,
@@ -77,28 +93,28 @@ jobs:
           BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
           PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
           MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
-          cp "$APP" dist/Weihnachtsuhr_ES3C28P_v5.1_FIRMWARE.bin
+          cp "$APP" dist/Peppi_v5_LVGL_BLACK_ES3C28P_FIRMWARE.bin
           cp "$BOOT" dist/bootloader.bin
           cp "$PART" dist/partitions.bin
           if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
-            cp "$MERGED" dist/Weihnachtsuhr_ES3C28P_v5.1_FULL.bin
+            cp "$MERGED" dist/Peppi_v5_LVGL_BLACK_ES3C28P_FULL.bin
           fi
           {
-            echo "Weihnachtsuhr v5.1 LVGL - ES3C28P"
+            echo "Peppi v5 LVGL - migrated from user-provided v4.6 ArduinoIDE source"
             echo "BLACK ES3C28P ONLY / ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
-            echo "Factory artwork embedded in firmware, including Grincz"
+            echo "Hardware/backend preserved from user v4.6 source; UI migrated to LVGL 9.3"
             echo "LVGL 9.3 UI / FT6336G absolute touch / NO CALIBRATION / user photos and music on SD"
             echo "Git commit: $GITHUB_SHA"
             echo
             sha256sum dist/*.bin
           } > dist/build-info.txt
-          zip -qr dist/Weihnachtsuhr_ES3C28P_v5.1_SOURCE.zip sketch/Weihnachtsuhr_v51_ES3C28P
+          zip -qr dist/Peppi_v5_LVGL_BLACK_ES3C28P_SOURCE.zip sketch/Weihnachtsuhr_v51_ES3C28P
           ls -lh dist
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: Peppi-BLACK-ES3C28P-v5.1-LVGL-BIN
+          name: Peppi-v5-LVGL-BLACK-ES3C28P-from-v4.6
           path: dist/
           if-no-files-found: error
           retention-days: 30
