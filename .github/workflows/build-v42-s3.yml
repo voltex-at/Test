@@ -51,99 +51,22 @@ jobs:
           new_cfg='''  screen::text(lcd,"Wi-Fi",190,76,&FreeSerifBold9pt7b,screen::CREAM,148);\n  screen::text(lcd,apName,190,101,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,tr("Passwort","Haslo","Password"),190,122,&FreeSerif9pt7b,screen::CREAM,148);\n  screen::text(lcd,adminPassword,190,143,&FreeSans9pt7b,screen::CREAM,150);\n  screen::text(lcd,"192.168.4.1",190,164,&FreeSans9pt7b,screen::CREAM,150);'''
           if old_cfg not in s: raise SystemExit("drawConfig pattern not found")
           s=s.replace(old_cfg,new_cfg)
-          old_cal='''void drawCalibration() {
-  lcd.fillScreen(BG);center(tr("Kalibrierung","Kalibracja","Calibration"),160,74,4,GOLD);center(tr("Kreuz antippen und loslassen","Dotknij i pusc krzyzyk","Tap and release the cross"),160,110,2);center(String(calibrationStep+1)+" / 3",160,140,2);
-  auto p=targets[calibrationStep];lcd.drawCircle(p.x,p.y,10,WHITE);lcd.drawFastHLine(p.x-15,p.y,31,GOLD);lcd.drawFastVLine(p.x,p.y-15,31,GOLD);
-}
-void startCalibration(){forceFull=true;calibrating=true;calibrationStep=0;touchHeld=true;drawCalibration();}'''
-          new_cal='''void drawCalibration() {
-  // FT6336G is capacitive and does not need affine calibration.
-  // This screen is now a 3-point touch verification instead.
-  lcd.fillScreen(0x0842);
-  center(tr("Touch-Test","Test dotyku","Touch test"),160,38,4,GOLD);
-  center(tr("Punkt antippen","Dotknij punktu","Tap the point"),160,68,2,WHITE);
-  center(String(calibrationStep+1)+" / 3",160,91,2,0xBDF7);
-  auto q=targets[calibrationStep];
-  lcd.drawCircle(q.x,q.y,13,GOLD);lcd.drawCircle(q.x,q.y,5,WHITE);
-  lcd.drawFastHLine(q.x-20,q.y,41,GOLD);lcd.drawFastVLine(q.x,q.y-20,41,GOLD);
-  center(tr("FT6336G - keine Kalibrierung noetig","FT6336G - kalibracja niepotrzebna","FT6336G - no calibration needed"),160,218,1,0xBDF7);
-}
-void startCalibration(){forceFull=true;calibrating=true;calibrationStep=0;touchHeld=false;drawCalibration();}'''
-          if old_cal not in s: raise SystemExit("calibration UI pattern not found")
-          s=s.replace(old_cal,new_cal)
-          old_player='''void drawPlayer(){
-  music::setCategory(musicCategory());
-  drawArtwork(playerArtwork());
-  // Dark translucent-like panels (solid on RGB display) keep controls readable.
-  lcd.fillRoundRect(18,12,44,30,8,screen::SHADOW);
-  screen::text(lcd,"<",40,29,&FreeSans9pt7b,screen::CREAM,32);
-  String cat=music::category();cat.toUpperCase();
-  lcd.fillRoundRect(58,12,204,30,8,screen::SHADOW);
-  screen::text(lcd,cat,160,29,&FreeSerifBold9pt7b,screen::GOLD,190);
-  String title=music::title();if(!title.length())title=tr("Musik waehlen","Wybierz muzyke","Choose music");
-  if(title.length()>34)title=title.substring(0,31)+"...";
-  lcd.fillRoundRect(34,142,252,34,8,screen::SHADOW);
-  screen::text(lcd,title,160,159,&FreeSans9pt7b,screen::CREAM,238);
-  lcd.fillRoundRect(28,187,264,45,10,screen::SHADOW);
-  screen::text(lcd,"<<",65,211,&FreeSans9pt7b,screen::GOLD,50);
-  screen::text(lcd,music::state==music::Playing?"II":">",160,211,&FreeSansBold24pt7b,screen::CREAM,55);
-  screen::text(lcd,">>",255,211,&FreeSans9pt7b,screen::GOLD,50);
-}'''
-          new_player='''void drawPlayer(){
-  music::setCategory(musicCategory());
-  drawArtwork(playerArtwork());
-  const uint16_t PANEL=0x10A3, PANEL2=0x18E3, MUTED=0xBDF7;
-
-  // Compact back button and mode chip.
-  lcd.fillCircle(27,27,18,PANEL);lcd.drawCircle(27,27,18,screen::GOLD);
-  lcd.drawFastHLine(20,27,14,screen::CREAM);lcd.drawLine(20,27,26,21,screen::CREAM);lcd.drawLine(20,27,26,33,screen::CREAM);
-  String cat=music::category();cat.toUpperCase();
-  lcd.fillRoundRect(58,10,204,34,17,PANEL);
-  screen::text(lcd,cat,160,27,&FreeSansBold9pt7b,screen::CREAM,185);
-
-  // Now-playing card: clean, modern, no oversized retro buttons.
-  lcd.fillRoundRect(20,126,280,52,16,PANEL);
-  screen::text(lcd,tr("JETZT","TERAZ","NOW PLAYING"),160,139,&FreeSans9pt7b,screen::GOLD,250);
-  String title=music::title();if(!title.length())title=tr("Keine Musik gewaehlt","Nie wybrano utworu","No track selected");
-  int dot=title.lastIndexOf('.');if(dot>0)title=title.substring(0,dot);
-  if(title.length()>38)title=title.substring(0,35)+"...";
-  screen::text(lcd,title,160,160,&FreeSans9pt7b,screen::CREAM,250);
-
-  // Thin progress accent. Real timing can be wired later without changing layout.
-  lcd.fillRoundRect(34,184,252,4,2,PANEL2);
-  if(music::state==music::Playing||music::state==music::Paused)lcd.fillRoundRect(34,184,84,4,2,screen::GOLD);
-
-  // Previous / Play-Pause / Next as circular controls.
-  lcd.fillCircle(79,214,20,PANEL);lcd.drawCircle(79,214,20,screen::GOLD);
-  lcd.fillTriangle(83,205,83,223,70,214,screen::CREAM);lcd.fillRect(68,205,3,18,screen::CREAM);
-
-  lcd.fillCircle(160,211,27,PANEL);lcd.drawCircle(160,211,27,screen::GOLD);lcd.drawCircle(160,211,26,screen::GOLD);
-  if(music::state==music::Playing){lcd.fillRoundRect(151,199,6,24,2,screen::CREAM);lcd.fillRoundRect(164,199,6,24,2,screen::CREAM);}
-  else lcd.fillTriangle(154,198,154,224,174,211,screen::CREAM);
-
-  lcd.fillCircle(241,214,20,PANEL);lcd.drawCircle(241,214,20,screen::GOLD);
-  lcd.fillTriangle(237,205,237,223,250,214,screen::CREAM);lcd.fillRect(250,205,3,18,screen::CREAM);
-}'''
-          if old_player not in s: raise SystemExit("player UI pattern not found")
-          s=s.replace(old_player,new_player)
-          old_cal_touch='''  if(calibrating){
-    calibrationRaw[calibrationStep++]=p;if(calibrationStep<3){drawCalibration();return;}
-    touch::Calibration next{};if(!touch::solve(calibrationRaw,targets,next)){calibrationStep=0;drawCalibration();return;}
-    Preferences prefs;bool saved=false;if(prefs.begin("peppi",false)){saved=prefs.putBytes("touch",&next,sizeof(next))==sizeof(next);prefs.end();}
-    calibration=next;calibrationReady=true;calibrating=false;dirty=true;if(!saved)Serial.println("Touch NVS write failed");return;
-  }
-  if(!calibrationReady){startCalibration();return;}p=touch::map(p,calibration);'''
-          new_cal_touch='''  if(calibrating){
-    // FT6336G test only: validate three points, do not distort coordinates with an affine matrix.
-    calibrationRaw[calibrationStep]=p;
-    calibrationStep++;
-    touchHeld=true;
-    if(calibrationStep<3){drawCalibration();return;}
-    calibration={0x54434831,1,0,0,0,1,0};calibrationReady=true;calibrating=false;forceFull=true;dirty=true;return;
-  }
-  p=touch::map(p,calibration);'''
-          if old_cal_touch not in s: raise SystemExit("calibration touch pattern not found")
-          s=s.replace(old_cal_touch,new_cal_touch)
+          p.write_text(s)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          p=Path("sketch/Weihnachtsuhr_v45_ES3C28P/main.cpp")
+          s=p.read_text()
+          pairs=[
+            ("dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oQkcpO2NlbnRlcih0cigiS2FsaWJyaWVydW5nIiwiS2FsaWJyYWNqYSIsIkNhbGlicmF0aW9uIiksMTYwLDc0LDQsR09MRCk7Y2VudGVyKHRyKCJLcmV1eiBhbnRpcHBlbiB1bmQgbG9zbGFzc2VuIiwiRG90a25paiBpIHB1c2Mga3J6eXp5ayIsIlRhcCBhbmQgcmVsZWFzZSB0aGUgY3Jvc3MiKSwxNjAsMTEwLDIpO2NlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsMTQwLDIpOwogIGF1dG8gcD10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07bGNkLmRyYXdDaXJjbGUocC54LHAueSwxMCxXSElURSk7bGNkLmRyYXdGYXN0SExpbmUocC54LTE1LHAueSwzMSxHT0xEKTtsY2QuZHJhd0Zhc3RWTGluZShwLngscC55LTE1LDMxLEdPTEQpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPXRydWU7ZHJhd0NhbGlicmF0aW9uKCk7fQ==","dm9pZCBkcmF3Q2FsaWJyYXRpb24oKSB7CiAgbGNkLmZpbGxTY3JlZW4oMHgwODQyKTsKICBjZW50ZXIodHIoIlRvdWNoLVRlc3QiLCJUZXN0IGRvdHlrdSIsIlRvdWNoIHRlc3QiKSwxNjAsMzgsNCxHT0xEKTsKICBjZW50ZXIodHIoIlB1bmt0IGFudGlwcGVuIiwiRG90a25paiBwdW5rdHUiLCJUYXAgdGhlIHBvaW50IiksMTYwLDY4LDIsV0hJVEUpOwogIGNlbnRlcihTdHJpbmcoY2FsaWJyYXRpb25TdGVwKzEpKyIgLyAzIiwxNjAsOTEsMiwweEJERjcpOwogIGF1dG8gcT10YXJnZXRzW2NhbGlicmF0aW9uU3RlcF07CiAgbGNkLmRyYXdDaXJjbGUocS54LHEueSwxMyxHT0xEKTtsY2QuZHJhd0NpcmNsZShxLngscS55LDUsV0hJVEUpOwogIGxjZC5kcmF3RmFzdEhMaW5lKHEueC0yMCxxLnksNDEsR09MRCk7bGNkLmRyYXdGYXN0VkxpbmUocS54LHEueS0yMCw0MSxHT0xEKTsKICBjZW50ZXIodHIoIkZUNjMzNkcgLSBrZWluZSBLYWxpYnJpZXJ1bmcgbm9ldGlnIiwiRlQ2MzM2RyAtIGthbGlicmFjamEgbmllcG90cnplYm5hIiwiRlQ2MzM2RyAtIG5vIGNhbGlicmF0aW9uIG5lZWRlZCIpLDE2MCwyMTgsMSwweEJERjcpOwp9CnZvaWQgc3RhcnRDYWxpYnJhdGlvbigpe2ZvcmNlRnVsbD10cnVlO2NhbGlicmF0aW5nPXRydWU7Y2FsaWJyYXRpb25TdGVwPTA7dG91Y2hIZWxkPWZhbHNlO2RyYXdDYWxpYnJhdGlvbigpO30=","touch-test-ui"),
+            ("dm9pZCBkcmF3UGxheWVyKCl7CiAgbXVzaWM6OnNldENhdGVnb3J5KG11c2ljQ2F0ZWdvcnkoKSk7CiAgZHJhd0FydHdvcmsocGxheWVyQXJ0d29yaygpKTsKICAvLyBEYXJrIHRyYW5zbHVjZW50LWxpa2UgcGFuZWxzIChzb2xpZCBvbiBSR0IgZGlzcGxheSkga2VlcCBjb250cm9scyByZWFkYWJsZS4KICBsY2QuZmlsbFJvdW5kUmVjdCgxOCwxMiw0NCwzMCw4LHNjcmVlbjo6U0hBRE9XKTsKICBzY3JlZW46OnRleHQobGNkLCI8Iiw0MCwyOSwmRnJlZVNhbnM5cHQ3YixzY3JlZW46OkNSRUFNLDMyKTsKICBTdHJpbmcgY2F0PW11c2ljOjpjYXRlZ29yeSgpO2NhdC50b1VwcGVyQ2FzZSgpOwogIGxjZC5maWxsUm91bmRSZWN0KDU4LDEyLDIwNCwzMCw4LHNjcmVlbjo6U0hBRE9XKTsKICBzY3JlZW46OnRleHQobGNkLGNhdCwxNjAsMjksJkZyZWVTZXJpZkJvbGQ5cHQ3YixzY3JlZW46OkdPTEQsMTkwKTsKICBTdHJpbmcgdGl0bGU9bXVzaWM6OnRpdGxlKCk7aWYoIXRpdGxlLmxlbmd0aCgpKXRpdGxlPXRyKCJNdXNpayB3YWVobGVuIiwiV3liaWVyeiBtdXp5a2UiLCJDaG9vc2UgbXVzaWMiKTsKICBpZih0aXRsZS5sZW5ndGgoKT4zNCl0aXRsZT10aXRsZS5zdWJzdHJpbmcoMCwzMSkrIi4uLiI7CiAgbGNkLmZpbGxSb3VuZFJlY3QoMzQsMTQyLDI1MiwzNCw4LHNjcmVlbjo6U0hBRE9XKTsKICBzY3JlZW46OnRleHQobGNkLHRpdGxlLDE2MCwxNTksJkZyZWVTYW5zOXB0N2Isc2NyZWVuOjpDUkVBTSwyMzgpOwogIGxjZC5maWxsUm91bmRSZWN0KDI4LDE4NywyNjQsNDUsMTAsc2NyZWVuOjpTSEFET1cpOwogIHNjcmVlbjo6dGV4dChsY2QsIjw8Iiw2NSwyMTEsJkZyZWVTYW5zOXB0N2Isc2NyZWVuOjpHT0xELDUwKTsKICBzY3JlZW46OnRleHQobGNkLG11c2ljOjpzdGF0ZT09bXVzaWM6OlBsYXlpbmc/IklJIjoiPiIsMTYwLDIxMSwmRnJlZVNhbnNCb2xkMjRwdDdiLHNjcmVlbjo6Q1JFQU0sNTUpOwogIHNjcmVlbjo6dGV4dChsY2QsIj4+IiwyNTUsMjExLCZGcmVlU2FuczlwdDdiLHNjcmVlbjo6R09MRCw1MCk7Cn0=","dm9pZCBkcmF3UGxheWVyKCl7CiAgbXVzaWM6OnNldENhdGVnb3J5KG11c2ljQ2F0ZWdvcnkoKSk7CiAgZHJhd0FydHdvcmsocGxheWVyQXJ0d29yaygpKTsKICBjb25zdCB1aW50MTZfdCBQQU5FTD0weDEwQTMsIFBBTkVMMj0weDE4RTM7CiAgbGNkLmZpbGxDaXJjbGUoMjcsMjcsMTgsUEFORUwpO2xjZC5kcmF3Q2lyY2xlKDI3LDI3LDE4LHNjcmVlbjo6R09MRCk7CiAgbGNkLmRyYXdGYXN0SExpbmUoMjAsMjcsMTQsc2NyZWVuOjpDUkVBTSk7bGNkLmRyYXdMaW5lKDIwLDI3LDI2LDIxLHNjcmVlbjo6Q1JFQU0pO2xjZC5kcmF3TGluZSgyMCwyNywyNiwzMyxzY3JlZW46OkNSRUFNKTsKICBTdHJpbmcgY2F0PW11c2ljOjpjYXRlZ29yeSgpO2NhdC50b1VwcGVyQ2FzZSgpOwogIGxjZC5maWxsUm91bmRSZWN0KDU4LDEwLDIwNCwzNCwxNyxQQU5FTCk7CiAgc2NyZWVuOjp0ZXh0KGxjZCxjYXQsMTYwLDI3LCZGcmVlU2Fuc0JvbGQ5cHQ3YixzY3JlZW46OkNSRUFNLDE4NSk7CiAgbGNkLmZpbGxSb3VuZFJlY3QoMjAsMTI2LDI4MCw1MiwxNixQQU5FTCk7CiAgc2NyZWVuOjp0ZXh0KGxjZCx0cigiSkVUWlQiLCJURVJBWiIsIk5PVyBQTEFZSU5HIiksMTYwLDEzOSwmRnJlZVNhbnM5cHQ3YixzY3JlZW46OkdPTEQsMjUwKTsKICBTdHJpbmcgdGl0bGU9bXVzaWM6OnRpdGxlKCk7aWYoIXRpdGxlLmxlbmd0aCgpKXRpdGxlPXRyKCJLZWluZSBNdXNpayBnZXdhZWhsdCIsIk5pZSB3eWJyYW5vIHV0d29ydSIsIk5vIHRyYWNrIHNlbGVjdGVkIik7CiAgaW50IGRvdD10aXRsZS5sYXN0SW5kZXhPZignLicpO2lmKGRvdD4wKXRpdGxlPXRpdGxlLnN1YnN0cmluZygwLGRvdCk7CiAgaWYodGl0bGUubGVuZ3RoKCk+MzgpdGl0bGU9dGl0bGUuc3Vic3RyaW5nKDAsMzUpKyIuLi4iOwogIHNjcmVlbjo6dGV4dChsY2QsdGl0bGUsMTYwLDE2MCwmRnJlZVNhbnM5cHQ3YixzY3JlZW46OkNSRUFNLDI1MCk7CiAgbGNkLmZpbGxSb3VuZFJlY3QoMzQsMTg0LDI1Miw0LDIsUEFORUwyKTsKICBpZihtdXNpYzo6c3RhdGU9PW11c2ljOjpQbGF5aW5nfHxtdXNpYzo6c3RhdGU9PW11c2ljOjpQYXVzZWQpbGNkLmZpbGxSb3VuZFJlY3QoMzQsMTg0LDg0LDQsMixzY3JlZW46OkdPTEQpOwogIGxjZC5maWxsQ2lyY2xlKDc5LDIxNCwyMCxQQU5FTCk7bGNkLmRyYXdDaXJjbGUoNzksMjE0LDIwLHNjcmVlbjo6R09MRCk7CiAgbGNkLmZpbGxUcmlhbmdsZSg4MywyMDUsODMsMjIzLDcwLDIxNCxzY3JlZW46OkNSRUFNKTtsY2QuZmlsbFJlY3QoNjgsMjA1LDMsMTgsc2NyZWVuOjpDUkVBTSk7CiAgbGNkLmZpbGxDaXJjbGUoMTYwLDIxMSwyNyxQQU5FTCk7bGNkLmRyYXdDaXJjbGUoMTYwLDIxMSwyNyxzY3JlZW46OkdPTEQpO2xjZC5kcmF3Q2lyY2xlKDE2MCwyMTEsMjYsc2NyZWVuOjpHT0xEKTsKICBpZihtdXNpYzo6c3RhdGU9PW11c2ljOjpQbGF5aW5nKXtsY2QuZmlsbFJvdW5kUmVjdCgxNTEsMTk5LDYsMjQsMixzY3JlZW46OkNSRUFNKTtsY2QuZmlsbFJvdW5kUmVjdCgxNjQsMTk5LDYsMjQsMixzY3JlZW46OkNSRUFNKTt9CiAgZWxzZSBsY2QuZmlsbFRyaWFuZ2xlKDE1NCwxOTgsMTU0LDIyNCwxNzQsMjExLHNjcmVlbjo6Q1JFQU0pOwogIGxjZC5maWxsQ2lyY2xlKDI0MSwyMTQsMjAsUEFORUwpO2xjZC5kcmF3Q2lyY2xlKDI0MSwyMTQsMjAsc2NyZWVuOjpHT0xEKTsKICBsY2QuZmlsbFRyaWFuZ2xlKDIzNywyMDUsMjM3LDIyMywyNTAsMjE0LHNjcmVlbjo6Q1JFQU0pO2xjZC5maWxsUmVjdCgyNTAsMjA1LDMsMTgsc2NyZWVuOjpDUkVBTSk7Cn0=","modern-player-ui"),
+            ("ICBpZihjYWxpYnJhdGluZyl7CiAgICBjYWxpYnJhdGlvblJhd1tjYWxpYnJhdGlvblN0ZXArK109cDtpZihjYWxpYnJhdGlvblN0ZXA8Myl7ZHJhd0NhbGlicmF0aW9uKCk7cmV0dXJuO30KICAgIHRvdWNoOjpDYWxpYnJhdGlvbiBuZXh0e307aWYoIXRvdWNoOjpzb2x2ZShjYWxpYnJhdGlvblJhdyx0YXJnZXRzLG5leHQpKXtjYWxpYnJhdGlvblN0ZXA9MDtkcmF3Q2FsaWJyYXRpb24oKTtyZXR1cm47fQogICAgUHJlZmVyZW5jZXMgcHJlZnM7Ym9vbCBzYXZlZD1mYWxzZTtpZihwcmVmcy5iZWdpbigicGVwcGkiLGZhbHNlKSl7c2F2ZWQ9cHJlZnMucHV0Qnl0ZXMoInRvdWNoIiwmbmV4dCxzaXplb2YobmV4dCkpPT1zaXplb2YobmV4dCk7cHJlZnMuZW5kKCk7fQogICAgY2FsaWJyYXRpb249bmV4dDtjYWxpYnJhdGlvblJlYWR5PXRydWU7Y2FsaWJyYXRpbmc9ZmFsc2U7ZGlydHk9dHJ1ZTtpZighc2F2ZWQpU2VyaWFsLnByaW50bG4oIlRvdWNoIE5WUyB3cml0ZSBmYWlsZWQiKTtyZXR1cm47CiAgfQogIGlmKCFjYWxpYnJhdGlvblJlYWR5KXtzdGFydENhbGlicmF0aW9uKCk7cmV0dXJuO31wPXRvdWNoOjptYXAocCxjYWxpYnJhdGlvbik7","ICBpZihjYWxpYnJhdGluZyl7CiAgICBjYWxpYnJhdGlvblJhd1tjYWxpYnJhdGlvblN0ZXBdPXA7Y2FsaWJyYXRpb25TdGVwKys7dG91Y2hIZWxkPXRydWU7CiAgICBpZihjYWxpYnJhdGlvblN0ZXA8Myl7ZHJhd0NhbGlicmF0aW9uKCk7cmV0dXJuO30KICAgIGNhbGlicmF0aW9uPXsweDU0NDM0ODMxLDEsMCwwLDAsMSwwfTtjYWxpYnJhdGlvblJlYWR5PXRydWU7Y2FsaWJyYXRpbmc9ZmFsc2U7Zm9yY2VGdWxsPXRydWU7ZGlydHk9dHJ1ZTtyZXR1cm47CiAgfQogIHA9dG91Y2g6Om1hcChwLGNhbGlicmF0aW9uKTs=","touch-test-logic"),
+          ]
+          for a,b,name in pairs:
+            old=base64.b64decode(a).decode(); new=base64.b64decode(b).decode()
+            if old not in s: raise SystemExit(name+" pattern not found")
+            s=s.replace(old,new)
           p.write_text(s)
           PY
           echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v45_ES3C28P/Weihnachtsuhr_v45_ES3C28P.ino
