@@ -119,6 +119,7 @@ jobs:
             echo
             sha256sum dist/*.bin
           } > dist/build-info.txt
+          zip -qr dist/Weihnachtsuhr_ES3C28P_v4.8_SOURCE.zip sketch/Weihnachtsuhr_v48_ES3C28P
           ls -lh dist
 
       - name: Upload binaries
