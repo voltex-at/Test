@@ -66,7 +66,7 @@ void drawPlayer(){
 }'''
 
 s, n = re.subn(r'void drawPlayerDynamic\(\)\{.*?\n\}\n\nvoid drawPlayer\(\)\{.*?\n\}', player, s, flags=re.S)
-if n != 1:
+if n != 1 and "void drawPlayerDynamic()" not in s:
     raise SystemExit(f"player replacement count={n}")
 
 s = s.replace(
