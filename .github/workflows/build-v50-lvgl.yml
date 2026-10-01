@@ -93,8 +93,8 @@ jobs:
           arduino-cli compile \
             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=huge_app" \
             --build-property upload.maximum_size=6291456 \
-            --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \\
-            --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \\
+            --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
+            --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1" \
             --output-dir build \
             sketch/Weihnachtsuhr_v50_ES3C28P
           ls -lah build
