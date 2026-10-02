@@ -72,6 +72,8 @@ jobs:
           app1,     app,  ota_1,   0x720000, 0x700000,
           spiffs,   data, spiffs,  0xe20000, 0x1e0000,
           EOF
+          # LVGL 9.5 lv_event_get_target() is typed as void*; cast it for slider API.
+          sed -i 's/lv_slider_get_value(lv_event_get_target(e))/lv_slider_get_value((lv_obj_t*)lv_event_get_target(e))/g' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.cpp
           grep -q '#include <lvgl.h>' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.h
           grep -q 'MALLOC_CAP_INTERNAL' sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_ES3C28P_LVGL9.ino
           ! grep -Rqi 'startCalibration\|/api/calibrate\|calibrationReady' sketch/Weihnachtsuhr_v51_ES3C28P || exit 1
