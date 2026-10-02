@@ -39,9 +39,17 @@ void PeppiDisplay::writePixel(int16_t x,int16_t y,uint16_t color){if(x<0||y<0||x
 void PeppiDisplay::writeFastHLine(int16_t x,int16_t y,int16_t w,uint16_t color){writeFillRect(x,y,w,1,color);}
 void PeppiDisplay::writeFastVLine(int16_t x,int16_t y,int16_t h,uint16_t color){writeFillRect(x,y,1,h,color);}
 void PeppiDisplay::pushImage(int16_t x,int16_t y,uint16_t w,uint16_t h,const uint16_t* pixels){
- if(!pixels||w==0||h==0)return;if(x<0||y<0||x+w>width()||y+h>height()){for(uint16_t yy=0;yy<h;++yy)for(uint16_t xx=0;xx<w;++xx)drawPixel(x+xx,y+yy,pixels[(uint32_t)yy*w+xx]);return;}
- setAddrWindowRaw(x,y,w,h);digitalWrite(PIN_DC,HIGH);digitalWrite(PIN_CS,LOW);const uint32_t n=(uint32_t)w*h;uint8_t buf[512];uint32_t i=0;
- while(i<n){const uint32_t chunk=(n-i)>256?256:(n-i);for(uint32_t k=0;k<chunk;++k){const uint16_t v=pixels[i+k];buf[2*k]=v>>8;buf[2*k+1]=v&0xFF;}spi_.writeBytes(buf,chunk*2);i+=chunk;}digitalWrite(PIN_CS,HIGH);
+ if(!pixels||w==0||h==0)return;
+ if(x<0||y<0||x+w>width()||y+h>height()){
+  for(uint16_t yy=0;yy<h;++yy)for(uint16_t xx=0;xx<w;++xx)drawPixel(x+xx,y+yy,pixels[(uint32_t)yy*w+xx]);
+  return;
+ }
+ setAddrWindowRaw(x,y,w,h);
+ digitalWrite(PIN_DC,HIGH);
+ digitalWrite(PIN_CS,LOW);
+ const uint32_t n=(uint32_t)w*h;
+ for(uint32_t i=0;i<n;++i) spi_.transfer16(pixels[i]);
+ digitalWrite(PIN_CS,HIGH);
 }
 void PeppiDisplay::drawEllipse(int16_t x0,int16_t y0,int16_t rx,int16_t ry,uint16_t color){if(rx<=0||ry<=0)return;for(int16_t x=-rx;x<=rx;++x){float q=1.0f-(float(x)*float(x))/(float(rx)*float(rx));if(q<0)continue;int16_t y=(int16_t)lroundf(float(ry)*sqrtf(q));drawPixel(x0+x,y0+y,color);drawPixel(x0+x,y0-y,color);}}
 void PeppiDisplay::fillEllipse(int16_t x0,int16_t y0,int16_t rx,int16_t ry,uint16_t color){if(rx<=0||ry<=0)return;for(int16_t y=-ry;y<=ry;++y){float q=1.0f-(float(y)*float(y))/(float(ry)*float(ry));if(q<0)continue;int16_t x=(int16_t)lroundf(float(rx)*sqrtf(q));drawFastHLine(x0-x,y0+y,x*2+1,color);}}
