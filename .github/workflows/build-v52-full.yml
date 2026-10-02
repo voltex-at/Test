@@ -74,6 +74,25 @@ jobs:
           EOF
           # LVGL 9.5 lv_event_get_target() is typed as void*; cast it for slider API.
           sed -i 's/lv_slider_get_value(lv_event_get_target(e))/lv_slider_get_value((lv_obj_t*)lv_event_get_target(e))/g' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.cpp
+          # Restore the music-toggle implementation that the supplied v5.2 source references.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_ES3C28P_LVGL9.ino")
+          s=p.read_text()
+          marker="void guiToggle(){toggleMusic();}"
+          impl="""void toggleMusic(){
+  music::setCategory(musicCategory());
+  music::toggle(sdReady);
+  audioNoticeAt=millis();
+  audioNotice=music::state==music::Failed;
+  dirty=true;
+}
+void guiToggle(){toggleMusic();}"""
+          if marker not in s:
+              raise SystemExit("guiToggle marker not found")
+          s=s.replace(marker,impl,1)
+          p.write_text(s)
+          PY
           grep -q '#include <lvgl.h>' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.h
           grep -q 'MALLOC_CAP_INTERNAL' sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_ES3C28P_LVGL9.ino
           ! grep -Rqi 'startCalibration\|/api/calibrate\|calibrationReady' sketch/Weihnachtsuhr_v51_ES3C28P || exit 1
