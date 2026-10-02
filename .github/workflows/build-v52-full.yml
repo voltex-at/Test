@@ -41,6 +41,16 @@ jobs:
           python3 scripts/v50_patch.py
           python3 scripts/v51_black_patch.py
           echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_v51_ES3C28P.ino
+          # v5.1 source package carried this sketch-local partition table; recreate it
+          # so the exact v5.1 -> v5.2 source patch can delete/replace it deterministically.
+          cat > sketch/Weihnachtsuhr_v51_ES3C28P/partitions.csv <<'EOF'
+          # Name,   Type, SubType, Offset,   Size,     Flags
+          nvs,      data, nvs,     0x9000,   0x5000,
+          otadata,  data, ota,     0xe000,   0x2000,
+          app0,     app,  ota_0,   0x10000,  0x600000,
+          app1,     app,  ota_1,   0x610000, 0x600000,
+          spiffs,   data, spiffs,  0xC10000, 0x3E0000,
+          EOF
 
       - name: Apply exact v5.2 full-backend source patch
         run: |
