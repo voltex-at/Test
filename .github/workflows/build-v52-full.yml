@@ -1,0 +1,128 @@
+name: Build Peppi v5.2 LVGL9 Full Backend
+
+on:
+  push:
+    branches: [v52-full-backend]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32-S3 core and libraries
+        run: |
+          set -euxo pipefail
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.2 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib update-index
+          arduino-cli lib install "TJpg_Decoder@1.1.0"
+          arduino-cli lib install "Adafruit GFX Library@1.11.11"
+          arduino-cli lib install "lvgl@9.5.0"
+          mkdir -p "$HOME/Arduino/libraries"
+          git clone --depth 1 --branch 3.4.4 https://github.com/schreibfaul1/ESP32-audioI2S.git "$HOME/Arduino/libraries/ESP32-audioI2S"
+
+      - name: Restore v5.1 black-board base
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/v51src sketch/Weihnachtsuhr_v51_ES3C28P
+          cat payload/part_* > /tmp/v51.b64
+          base64 -d /tmp/v51.b64 | tar -xz -C /tmp/v51src
+          cp /tmp/v51src/include/* sketch/Weihnachtsuhr_v51_ES3C28P/
+          cp /tmp/v51src/src/*.cpp sketch/Weihnachtsuhr_v51_ES3C28P/
+          sed -i 's/FreeSansBold9pt7b/FreeSans9pt7b/g' sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp
+          python3 scripts/v47_patch.py
+          python3 scripts/v48_patch.py
+          python3 scripts/v50_patch.py
+          python3 scripts/v51_black_patch.py
+          echo '// Arduino build anchor' > sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_v51_ES3C28P.ino
+
+      - name: Apply exact v5.2 full-backend source patch
+        run: |
+          set -euxo pipefail
+          cat v52patch/part_* > /tmp/v52.patch.gz.b64
+          base64 -d /tmp/v52.patch.gz.b64 > /tmp/v52.patch.gz
+          test "$(sha256sum /tmp/v52.patch.gz | awk '{print $1}')" = "84292d035e7d1846f187247ee9aa37d6aed386a03a766d1760b9b2b035e9caf7"
+          gzip -dc /tmp/v52.patch.gz > /tmp/v52.patch
+          test "$(sha256sum /tmp/v52.patch | awk '{print $1}')" = "ef6ba04d3725ca77ed56b40a8b3fd781ca46df1c39dc7feb38bd7bed52bb7092"
+          (
+            cd sketch/Weihnachtsuhr_v51_ES3C28P
+            patch -p4 --forward --batch < /tmp/v52.patch
+          )
+          cat > sketch/Weihnachtsuhr_v51_ES3C28P/partitions.csv <<'EOF'
+          # Name,   Type, SubType, Offset,   Size, Flags
+          nvs,      data, nvs,     0x9000,   0x6000,
+          otadata,  data, ota,     0xf000,   0x2000,
+          app0,     app,  ota_0,   0x20000,  0x700000,
+          app1,     app,  ota_1,   0x720000, 0x700000,
+          spiffs,   data, spiffs,  0xe20000, 0x1e0000,
+          EOF
+          grep -q '#include <lvgl.h>' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.cpp
+          grep -q 'MALLOC_CAP_INTERNAL' sketch/Weihnachtsuhr_v51_ES3C28P/LvglUI.cpp
+          ! grep -Rqi 'startCalibration\|/api/calibrate\|calibrationReady' sketch/Weihnachtsuhr_v51_ES3C28P || exit 1
+          test -f sketch/Weihnachtsuhr_v51_ES3C28P/Artwork.h
+          test -f sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_ES3C28P_LVGL9.ino
+          test ! -f sketch/Weihnachtsuhr_v51_ES3C28P/main.cpp
+          test ! -f sketch/Weihnachtsuhr_v51_ES3C28P/Weihnachtsuhr_v51_ES3C28P.ino
+          mv sketch/Weihnachtsuhr_v51_ES3C28P sketch/Weihnachtsuhr_ES3C28P_LVGL9
+          ls -lah sketch/Weihnachtsuhr_ES3C28P_LVGL9 | head -60
+
+      - name: Compile ESP32-S3 16MB / OPI PSRAM
+        run: |
+          set -euxo pipefail
+          mkdir -p build
+          arduino-cli compile             --fqbn "esp32:esp32:esp32s3:FlashSize=16M,FlashMode=qio,PSRAM=opi,PartitionScheme=huge_app"             --build-property compiler.cpp.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1"             --build-property compiler.c.extra_flags="-DLV_CONF_INCLUDE_SIMPLE=1"             --output-dir build             sketch/Weihnachtsuhr_ES3C28P_LVGL9
+          ls -lah build
+          find build -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+      - name: Package verified binaries
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p dist
+          APP="$(find build -maxdepth 1 -type f -name '*.ino.bin' | head -n1)"
+          BOOT="$(find build -maxdepth 1 -type f -name '*.bootloader.bin' | head -n1)"
+          PART="$(find build -maxdepth 1 -type f -name '*.partitions.bin' | head -n1)"
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' | head -n1 || true)"
+          test -n "$APP" && test -f "$APP"
+          test -n "$BOOT" && test -f "$BOOT"
+          test -n "$PART" && test -f "$PART"
+          cp "$APP" dist/Peppi_v5.2_LVGL9_FULL_BACKEND_FIRMWARE.bin
+          cp "$BOOT" dist/bootloader.bin
+          cp "$PART" dist/partitions.bin
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ]; then
+            cp "$MERGED" dist/Peppi_v5.2_LVGL9_FULL_BACKEND_FULL.bin
+          fi
+          {
+            echo "Peppi v5.2 LVGL9 FULL BACKEND"
+            echo "BLACK ES3C28P ONLY / ESP32-S3 / ILI9341V / FT6336G / ES8311 / SD_MMC"
+            echo "LVGL 9.5.0 / internal-RAM LVGL draw buffer / full backend enabled"
+            echo "ESP32-audioI2S 3.4.4"
+            echo "Git commit: $GITHUB_SHA"
+            echo
+            echo "Build files:"
+            sha256sum dist/*.bin
+            echo
+            if [ -f dist/Peppi_v5.2_LVGL9_FULL_BACKEND_FULL.bin ]; then
+              echo "FULL.bin was produced by Arduino-ESP32 merged image output."
+            else
+              echo "No merged FULL.bin was produced; use individual images according to Arduino build flash_args."
+            fi
+          } > dist/build-info.txt
+          cp build/*flash_args* dist/ 2>/dev/null || true
+          cp build/*args* dist/ 2>/dev/null || true
+          zip -qr dist/Peppi_v5.2_LVGL9_FULL_BACKEND_SOURCE.zip sketch/Weihnachtsuhr_ES3C28P_LVGL9
+          ls -lah dist
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Peppi-v5.2-LVGL9-FULL-BACKEND
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
