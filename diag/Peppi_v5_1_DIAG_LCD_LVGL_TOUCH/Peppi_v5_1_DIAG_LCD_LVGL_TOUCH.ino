@@ -7,7 +7,6 @@ PeppiDisplay lcd;
 static lv_display_t* disp=nullptr;
 static lv_indev_t* indev=nullptr;
 static uint8_t* bufA=nullptr;
-static uint8_t* bufB=nullptr;
 static lv_obj_t* coordLabel=nullptr;
 static volatile uint32_t flushCount=0;
 static uint32_t lastTouchMs=0;
@@ -39,10 +38,10 @@ void setup(){
   Serial.println("[DIAG] FT6336G init...");touch::begin();Serial.println("[DIAG] FT6336G init OK");
   Serial.println("[DIAG] LVGL init...");lv_init();
   constexpr size_t bytes=320U*32U*2U;
-  bufA=(uint8_t*)heap_caps_malloc(bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);bufB=(uint8_t*)heap_caps_malloc(bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
-  if(!bufA)bufA=(uint8_t*)malloc(bytes);if(!bufB)bufB=(uint8_t*)malloc(bytes);
-  if(!bufA||!bufB){Serial.println("[DIAG] FATAL: LVGL buffer alloc failed");lcd.fillScreen(0xF800);while(true)delay(1000);}
-  disp=lv_display_create(320,240);lv_display_set_color_format(disp,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(disp,flushCb);lv_display_set_buffers(disp,bufA,bufB,bytes,LV_DISPLAY_RENDER_MODE_PARTIAL);
+  bufA=(uint8_t*)heap_caps_malloc(bytes,MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+  if(!bufA)bufA=(uint8_t*)malloc(bytes);
+  if(!bufA){Serial.println("[DIAG] FATAL: LVGL buffer alloc failed");lcd.fillScreen(0xF800);while(true)delay(1000);}
+  disp=lv_display_create(320,240);lv_display_set_color_format(disp,LV_COLOR_FORMAT_RGB565);lv_display_set_flush_cb(disp,flushCb);lv_display_set_buffers(disp,bufA,nullptr,bytes,LV_DISPLAY_RENDER_MODE_PARTIAL);
   indev=lv_indev_create();lv_indev_set_type(indev,LV_INDEV_TYPE_POINTER);lv_indev_set_read_cb(indev,touchCb);
   buildUi();lv_refr_now(disp);Serial.printf("[DIAG] LVGL OK, first flushes=%lu\n",(unsigned long)flushCount);Serial.println("[DIAG] minimal test running");
 }
